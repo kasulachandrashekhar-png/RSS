@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Rasuwa Secondary School Examination Portal</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- SheetJS for Excel Upload/Export -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <!-- html2pdf for PDF Export -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+            -webkit-tap-highlight-color: transparent; 
+        }
+        
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #f1f1f1; 
+            border-radius: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #cbd5e1; 
+            border-radius: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8; 
+        }
+        
+        .hide-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .hide-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+
+        .glass-effect {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+        }
+        .fade-in {
+            animation: fadeIn 0.3s ease-in-out;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @media print {
+            body { background: white !important; }
+            #sidebar, header, .no-print, #sidebar-overlay { display: none !important; }
+            #main-app, main, #content-area { display: block !important; height: auto !important; overflow: visible !important; width: 100% !important; margin: 0 !important; padding: 0 !important; background: white !important;}
+            .print-section { width: 100% !important; box-shadow: none !important; border: none !important; padding: 0 !important; margin: 0 !important; }
+            
+            .admit-grid-print { 
+                display: grid !important; 
+                grid-template-columns: 1fr 1fr !important; 
+                grid-template-rows: repeat(auto-fill, 13cm) !important;
+                gap: 1cm !important; 
+                width: 21cm !important; 
+                padding: 1cm !important;
+                box-sizing: border-box !important;
+            }
+            .admit-card-print-box { 
+                border: 1px solid #000 !important;
+                height: 12.5cm !important; 
+                width: 100% !important;
+                box-sizing: border-box !important;
+                page-break-inside: avoid !important;
+                padding: 10px !important;
+            }
+            .page-break { page-break-after: always !important; }
+            .grade-sheet-container { background: white !important; padding: 0 !important; }
+            
+            #admit-card-container { display: none !important; }
+        }
+        
+        #admit-card-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); 
+            gap: 20px;
+        }
+        .admit-card-screen {
+             border: 1px solid #000;
+             padding: 15px;
+             background: white;
+             overflow-x: auto; 
+        }
+    </style>
+</head>
+<body class="text-gray-800 h-screen overflow-hidden flex flex-col">
+
+    <div id="toast-container" class="fixed top-5 right-5 z-50 flex flex-col gap-2"></div>
+
+    <div id="login-screen" class="flex-1 flex items-center justify-center bg-gradient-to-br from-blue-900 to-blue-700 p-4 absolute inset-0 z-50 transition-opacity duration-500 overflow-y-auto">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 sm:p-8 glass-effect fade-in m-auto my-8">
+            <div class="text-center mb-8">
+                <img src="https://placehold.co/100x100/1e3a8a/ffffff?text=RSS" alt="School Logo" class="mx-auto rounded-full mb-4 shadow-md w-20 h-20">
+                <h1 class="text-xl sm:text-2xl font-bold text-blue-900">Rasuwa Secondary School</h1>
+                <p class="text-gray-500 text-sm mt-1">Examination Portal</p>
+            </div>
+
+            <div class="flex mb-6 bg-gray-100 rounded-lg p-1">
+                <button id="tab-admin" onclick="switchLoginTab('admin')" class="flex-1 py-2 text-sm font-semibold rounded-md bg-white shadow text-blue-600 transition-all">Admin</button>
+                <button id="tab-teacher" onclick="switchLoginTab('teacher')" class="flex-1 py-2 text-sm font-semibold rounded-md text-gray-500 hover:text-gray-700 transition-all">Teacher</button>
+            </div>
+
+            <form id="login-form" onsubmit="handleLogin(event)">
+                <input type="hidden" id="login-role" value="admin">
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Username</label>
+                    <div class="relative">
+                        <i class="fas fa-user absolute left-3 top-3 text-gray-400"></i>
+                        <input type="text" id="username" class="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all" placeholder="Enter username" required>
+                    </div>
+                </div>
+                <div class="mb-6">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Password</label>
+                    <div class="relative">
+                        <i class="fas fa-lock absolute left-3 top-3 text-gray-400"></i>
+                        <input type="password" id="password" class="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all" placeholder="Enter password" required>
+                    </div>
+                </div>
+                <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition-colors flex justify-center items-center gap-2">
+                    <span>Login</span>
+                    <i class="fas fa-arrow-right"></i>
+                </button>
+            </form>
+            <div class="mt-4 text-center text-xs text-gray-400">
+                <p id="login-hint">Hint: Admin login is admin / admin</p>
+            </div>
+        </div>
+    </div>
+
+    <div id="main-app" class="hidden h-screen w-full bg-gray-50 flex overflow-hidden">
+        
+        <div id="sidebar-overlay" class="fixed inset-0 bg-black bg-opacity-50 z-20 hidden lg:hidden transition-opacity" onclick="toggleSidebar()"></div>
+
+        <aside class="fixed inset-y-0 left-0 z-30 w-64 bg-blue-900 text-white flex flex-col shadow-xl transform -translate-x-full lg:translate-x-0 lg:static lg:inset-0 transition-transform duration-300 ease-in-out" id="sidebar">
+            <div class="p-4 border-b border-blue-800 flex justify-between items-center">
+                <div class="flex items-center gap-3">
+                    <img src="https://placehold.co/40x40/ffffff/1e3a8a?text=RSS" alt="Logo" class="rounded-full w-10 h-10">
+                    <div>
+                        <h2 class="font-bold text-sm">Rasuwa Sec. School</h2>
+                        <p class="text-xs text-blue-300" id="user-role-display">Admin Portal</p>
+                    </div>
+                </div>
+                <button class="lg:hidden text-blue-300 hover:text-white" onclick="toggleSidebar()">
+                    <i class="fas fa-times text-xl"></i>
+                </button>
+            </div>
+            
+            <nav class="flex-1 overflow-y-auto py-4 custom-scrollbar" id="nav-menu">
+            </nav>
+
+            <div class="p-4 border-t border-blue-800">
+                <button onclick="logout()" class="w-full flex items-center justify-center gap-2 bg-blue-800 hover:bg-red-600 py-2 rounded-lg transition-colors text-sm font-medium">
+                    <i class="fas fa-sign-out-alt"></i> Logout
+                </button>
+            </div>
+        </aside>
+
+        <main class="flex-1 flex flex-col h-screen min-w-0 overflow-hidden relative">
+            <header class="bg-white shadow-sm border-b px-4 sm:px-6 py-4 flex justify-between items-center z-10 flex-shrink-0">
+                <div class="flex items-center gap-3 sm:gap-4">
+                    <button class="lg:hidden text-gray-600 hover:text-blue-600 focus:outline-none" onclick="toggleSidebar()">
+                        <i class="fas fa-bars text-xl"></i>
+                    </button>
+                    <h2 class="text-lg sm:text-xl font-bold text-gray-800 truncate" id="page-title">Dashboard</h2>
+                </div>
+                <div class="flex items-center gap-2 sm:gap-3">
+                    <div id="save-indicator" class="hidden sm:flex items-center gap-1.5 text-xs text-gray-400 bg-gray-50 border border-gray-100 px-2.5 py-1.5 rounded-full transition-colors"></div>
+                    <div class="hidden sm:block text-right">
+                        <p class="font-medium text-sm text-gray-700 leading-tight" id="logged-username">Admin</p>
+                        <p class="text-xs text-gray-400">Online</p>
+                    </div>
+                    <div class="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-bold border border-blue-200">
+                        <i class="fas fa-user text-sm"></i>
+                    </div>
+                </div>
+            </header>
+
+            <div id="content-area" class="flex-1 overflow-y-auto p-4 sm:p-6 bg-gray-50 custom-scrollbar relative">
+            </div>
+        </main>
+    </div>
+
+    <script src="/src/portal_core.js"></script>
+    <script src="/src/portal_students_teachers.js"></script>
+    <script src="/src/portal_academics_exams.js"></script>
+    <script src="/src/portal_results_attendance.js"></script>
+</body>
+</html>

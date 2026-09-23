@@ -1,0 +1,6 @@
+{
+  "name": "Rasuwa Secondary School Examination Portal",
+  "description": "Examination, grading, attendance, and student record management portal for Shree Rasuwa Secondary School.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
