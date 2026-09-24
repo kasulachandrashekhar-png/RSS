@@ -1,0 +1,41 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 1. Global Safety Net - Default Deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function isValidSection(data) {
+      return data.id is string && data.id.size() <= 64 &&
+        (!('sectionName' in data) || (data.sectionName is string && data.sectionName.size() <= 64)) &&
+        (!('updatedAt' in data) || (data.updatedAt is string && data.updatedAt.size() <= 64)) &&
+        (!('updatedBy' in data) || (data.updatedBy is string && data.updatedBy.size() <= 128));
+    }
+
+    // School Portal state sections (meta, students, teachers, marks, attendance)
+    match /school_portal/{sectionId} {
+      allow get: if isValidId(sectionId);
+      allow list: if true;
+      allow create, update: if isValidId(sectionId) && isValidSection(incoming());
+      allow delete: if false;
+    }
+
+    // Connection probe document
+    match /test/{testId} {
+      allow get: if isValidId(testId);
+      allow list: if true;
+      allow create, update: if isValidId(testId) && (!('status' in incoming()) || (incoming().status is string && incoming().status.size() <= 32));
+      allow delete: if false;
+    }
+  }
+}

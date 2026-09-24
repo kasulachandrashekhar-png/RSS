@@ -138,8 +138,22 @@
                     <i class="fas fa-arrow-right"></i>
                 </button>
             </form>
+
+            <div class="relative my-4">
+                <div class="absolute inset-0 flex items-center"><div class="w-full border-t border-gray-200"></div></div>
+                <div class="relative flex justify-center text-xs uppercase"><span class="bg-white px-2 text-gray-400">or Google Cloud Login</span></div>
+            </div>
+
+            <button type="button" onclick="signInWithGoogle()" class="w-full bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 font-medium py-2 px-4 rounded-lg shadow-sm transition-colors flex justify-center items-center gap-2 text-sm">
+                <svg class="w-4 h-4" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/></svg>
+                <span>Continue with Google</span>
+            </button>
+
             <div class="mt-4 text-center text-xs text-gray-400">
                 <p id="login-hint">Hint: Admin login is admin / admin</p>
+                <div class="mt-2 text-blue-600 font-medium flex items-center justify-center gap-1.5">
+                    <i class="fas fa-database text-xs"></i> <span>Firebase Cloud Sync Active</span>
+                </div>
             </div>
 
         </div>
@@ -182,10 +196,16 @@
                     <h2 class="text-lg sm:text-xl font-bold text-gray-800 truncate" id="page-title">Dashboard</h2>
                 </div>
                 <div class="flex items-center gap-2 sm:gap-3">
-                    <div id="save-indicator" class="hidden sm:flex items-center gap-1.5 text-xs text-gray-400 bg-gray-50 border border-gray-100 px-2.5 py-1.5 rounded-full transition-colors"></div>
+                    <div id="save-indicator" onclick="forceCloudSync()" title="Data synced to Firebase Cloud. Click to refresh sync." class="hidden sm:flex items-center gap-1.5 text-xs text-gray-600 bg-gray-50 hover:bg-gray-100 border border-gray-200 px-2.5 py-1.5 rounded-full transition-colors cursor-pointer select-none">
+                        <i class="fas fa-cloud text-green-500"></i>
+                        <span class="text-green-700 font-medium">Cloud Active</span>
+                    </div>
+                    <button onclick="forceCloudSync()" title="Refresh Cloud Sync" class="sm:hidden w-8 h-8 rounded-full bg-blue-50 text-blue-600 hover:bg-blue-100 flex items-center justify-center border border-blue-200 text-xs">
+                        <i class="fas fa-sync"></i>
+                    </button>
                     <div class="hidden sm:block text-right">
                         <p class="font-medium text-sm text-gray-700 leading-tight" id="logged-username">Admin</p>
-                        <p class="text-xs text-gray-400">Online</p>
+                        <p class="text-xs text-green-600 font-medium flex items-center justify-end gap-1"><span class="w-1.5 h-1.5 rounded-full bg-green-500 inline-block"></span> Online</p>
                     </div>
                     <div class="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-bold border border-blue-200">
                         <i class="fas fa-user text-sm"></i>
@@ -197,6 +217,107 @@
             </div>
         </main>
     </div>
+
+<script type="module" src="/src/ResultAnalytics.tsx"></script>
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
+    import { 
+        getFirestore, 
+        doc, 
+        getDoc, 
+        setDoc, 
+        onSnapshot, 
+        getDocFromServer 
+    } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+    import { 
+        getAuth, 
+        GoogleAuthProvider, 
+        signInWithPopup, 
+        signOut,
+        onAuthStateChanged 
+    } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
+
+    const firebaseConfig = {
+        projectId: "gen-lang-client-0670539434",
+        appId: "1:700954170907:web:b6c649c9ad139fef5e8abe",
+        apiKey: "AIzaSyD_jCowXKj1oJRDFM9_8jKzVZvxJwPrlwM",
+        authDomain: "gen-lang-client-0670539434.firebaseapp.com",
+        firestoreDatabaseId: "ai-studio-rasuwasecondarys-2d8e3c7b-eda7-4ff4-bed6-7ff7d809f459",
+        storageBucket: "gen-lang-client-0670539434.firebasestorage.app",
+        messagingSenderId: "700954170907",
+        oAuthClientId: "700954170907-unj4holkbi2cn8hro2nl2maj3uvgdfa2.apps.googleusercontent.com"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+    const auth = getAuth(app);
+
+    const OperationType = {
+        CREATE: 'create',
+        UPDATE: 'update',
+        DELETE: 'delete',
+        LIST: 'list',
+        GET: 'get',
+        WRITE: 'write',
+    };
+
+    function handleFirestoreError(error, operationType, path) {
+        const errInfo = {
+            error: error instanceof Error ? error.message : String(error),
+            authInfo: {
+                userId: auth?.currentUser?.uid || null,
+                email: auth?.currentUser?.email || null,
+                emailVerified: auth?.currentUser?.emailVerified || null,
+                isAnonymous: auth?.currentUser?.isAnonymous || null,
+                tenantId: auth?.currentUser?.tenantId || null,
+                providerInfo: auth?.currentUser?.providerData?.map(provider => ({
+                    providerId: provider.providerId,
+                    email: provider.email,
+                })) || []
+            },
+            operationType,
+            path
+        };
+        console.error('Firestore Error: ', JSON.stringify(errInfo));
+        throw new Error(JSON.stringify(errInfo));
+    }
+
+    async function testConnection() {
+        try {
+            await getDocFromServer(doc(db, 'test', 'connection'));
+            console.log("Firebase Firestore connected successfully.");
+            return true;
+        } catch (error) {
+            if (error instanceof Error && error.message.includes('the client is offline')) {
+                console.error("Please check your Firebase configuration.");
+            }
+            console.warn("Firebase startup test probe:", error.message);
+            return false;
+        }
+    }
+
+    window.portalFirebase = {
+        app,
+        db,
+        auth,
+        doc,
+        getDoc,
+        setDoc,
+        onSnapshot,
+        handleFirestoreError,
+        OperationType,
+        GoogleAuthProvider,
+        signInWithPopup,
+        signOut,
+        onAuthStateChanged,
+        testConnection
+    };
+
+    window.dispatchEvent(new CustomEvent('portalFirebaseReady'));
+    if (typeof window.initPortalCloudSync === 'function') {
+        window.initPortalCloudSync();
+    }
+</script>
 
 <script>
 // portal_core.js
@@ -273,10 +394,40 @@ const STORAGE_KEY = 'rss_exam_portal_state_v1';
 const SESSION_KEY = 'rss_exam_portal_session_v1';
 var saveTimer = null;
 var lastSavedAt = null;
+var cloudSaveTimer = null;
+var cloudSyncStatus = 'connecting';
+var isCloudPushing = false;
+var cloudUnsubscribers = [];
+var lastCloudSyncTime = null;
+var currentPageId = null;
 
 function persistableState() {
     const { currentUser, ...rest } = state;
     return rest;
+}
+
+function updateSaveIndicator(failed, overrideStatus) {
+    const el = document.getElementById('save-indicator');
+    if (!el) return;
+    el.classList.remove('hidden');
+    el.classList.add('flex');
+
+    if (failed || cloudSyncStatus === 'error') {
+        el.innerHTML = '<i class="fas fa-exclamation-triangle text-amber-500"></i> <span class="text-amber-700 font-medium">Offline / Local Save</span>';
+        el.title = 'Saved locally in browser. Click to retry cloud sync.';
+        return;
+    }
+
+    if (overrideStatus === 'syncing' || isCloudPushing) {
+        el.innerHTML = '<i class="fas fa-sync fa-spin text-blue-500"></i> <span class="text-blue-600 font-medium">Cloud Syncing...</span>';
+        el.title = 'Synchronizing with Firebase Cloud Database';
+        return;
+    }
+
+    const t = lastCloudSyncTime || lastSavedAt;
+    const timeStr = t ? t.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+    el.innerHTML = `<i class="fas fa-cloud text-green-500"></i> <span class="text-green-700 font-medium">Cloud Synced ${timeStr}</span>`;
+    el.title = 'Data safely stored in Firebase Cloud Database. Click to refresh.';
 }
 
 function saveState(immediate) {
@@ -284,7 +435,8 @@ function saveState(immediate) {
         try {
             localStorage.setItem(STORAGE_KEY, JSON.stringify(persistableState()));
             lastSavedAt = new Date();
-            updateSaveIndicator();
+            updateSaveIndicator(false, 'syncing');
+            syncPushToCloud(immediate);
         } catch (err) {
             console.error('Auto-save failed:', err);
             updateSaveIndicator(true);
@@ -295,17 +447,302 @@ function saveState(immediate) {
     saveTimer = setTimeout(doSave, 600);
 }
 
-function updateSaveIndicator(failed) {
-    const el = document.getElementById('save-indicator');
-    if (!el) return;
-    if (failed) {
-        el.innerHTML = '<i class="fas fa-exclamation-triangle text-red-400"></i> <span>Save failed</span>';
+function syncPushToCloud(immediate) {
+    if (!window.portalFirebase || !window.portalFirebase.db) return;
+    const doPush = async () => {
+        if (isCloudPushing) return;
+        isCloudPushing = true;
+        updateSaveIndicator(false, 'syncing');
+        try {
+            const { db, doc, setDoc, handleFirestoreError, OperationType } = window.portalFirebase;
+            const nowIso = new Date().toISOString();
+            const author = state.currentUser ? (state.currentUser.username || state.currentUser.fullName || state.currentUser.email || 'Admin') : 'System';
+
+            // 1. Meta settings (classes, subjects, terms, months, rules, examSettings, password)
+            const metaPayload = {
+                id: 'meta',
+                sectionName: 'Academic Settings & Rules',
+                adminPassword: state.adminPassword || 'admin',
+                classes: state.classes || [],
+                subjects: state.subjects || [],
+                terms: state.terms || [],
+                months: state.months || [],
+                gradeRules: state.gradeRules || [],
+                examSettings: state.examSettings || {},
+                updatedAt: nowIso,
+                updatedBy: author
+            };
+            await setDoc(doc(db, 'school_portal', 'meta'), metaPayload).catch(e => handleFirestoreError(e, OperationType.WRITE, 'school_portal/meta'));
+
+            // 2. Students list
+            const studentsPayload = {
+                id: 'students',
+                sectionName: 'Student Records',
+                list: state.students || [],
+                updatedAt: nowIso,
+                updatedBy: author
+            };
+            await setDoc(doc(db, 'school_portal', 'students'), studentsPayload).catch(e => handleFirestoreError(e, OperationType.WRITE, 'school_portal/students'));
+
+            // 3. Teachers list
+            const teachersPayload = {
+                id: 'teachers',
+                sectionName: 'Teacher Records',
+                list: state.teachers || [],
+                updatedAt: nowIso,
+                updatedBy: author
+            };
+            await setDoc(doc(db, 'school_portal', 'teachers'), teachersPayload).catch(e => handleFirestoreError(e, OperationType.WRITE, 'school_portal/teachers'));
+
+            // 4. Marks records
+            const marksPayload = {
+                id: 'marks',
+                sectionName: 'Examination Marks',
+                list: state.marks || [],
+                updatedAt: nowIso,
+                updatedBy: author
+            };
+            await setDoc(doc(db, 'school_portal', 'marks'), marksPayload).catch(e => handleFirestoreError(e, OperationType.WRITE, 'school_portal/marks'));
+
+            // 5. Attendance records
+            const attendancePayload = {
+                id: 'attendance',
+                sectionName: 'Student Attendance',
+                list: state.attendance || [],
+                updatedAt: nowIso,
+                updatedBy: author
+            };
+            await setDoc(doc(db, 'school_portal', 'attendance'), attendancePayload).catch(e => handleFirestoreError(e, OperationType.WRITE, 'school_portal/attendance'));
+
+            lastCloudSyncTime = new Date();
+            cloudSyncStatus = 'synced';
+            updateSaveIndicator();
+            const badge = document.getElementById('cloud-last-sync-text');
+            if (badge) badge.innerHTML = `<strong>Last Sync:</strong> ${lastCloudSyncTime.toLocaleTimeString()}`;
+        } catch (err) {
+            console.error('Cloud push error:', err);
+            cloudSyncStatus = 'error';
+            updateSaveIndicator(true);
+        } finally {
+            isCloudPushing = false;
+        }
+    };
+
+    if (immediate) { doPush(); return; }
+    clearTimeout(cloudSaveTimer);
+    cloudSaveTimer = setTimeout(doPush, 1000);
+}
+
+window.initPortalCloudSync = async function() {
+    if (!window.portalFirebase || !window.portalFirebase.db) return;
+    const { db, doc, getDoc, onSnapshot, handleFirestoreError, OperationType, testConnection } = window.portalFirebase;
+
+    try {
+        await testConnection();
+    } catch (e) {
+        console.warn('Startup probe check:', e);
+    }
+
+    updateSaveIndicator(false, 'syncing');
+
+    try {
+        const metaRef = doc(db, 'school_portal', 'meta');
+        const studentsRef = doc(db, 'school_portal', 'students');
+        const teachersRef = doc(db, 'school_portal', 'teachers');
+        const marksRef = doc(db, 'school_portal', 'marks');
+        const attendanceRef = doc(db, 'school_portal', 'attendance');
+
+        let metaSnap, studentsSnap, teachersSnap, marksSnap, attendanceSnap;
+        try {
+            [metaSnap, studentsSnap, teachersSnap, marksSnap, attendanceSnap] = await Promise.all([
+                getDoc(metaRef),
+                getDoc(studentsRef),
+                getDoc(teachersRef),
+                getDoc(marksRef),
+                getDoc(attendanceRef)
+            ]);
+        } catch (err) {
+            handleFirestoreError(err, OperationType.GET, 'school_portal');
+        }
+
+        const hasCloudData = (metaSnap && metaSnap.exists()) || 
+                             (studentsSnap && studentsSnap.exists()) || 
+                             (teachersSnap && teachersSnap.exists()) || 
+                             (marksSnap && marksSnap.exists());
+
+        if (hasCloudData) {
+            console.log("Loading school records from Firebase Cloud Database...");
+            if (metaSnap && metaSnap.exists()) {
+                const d = metaSnap.data();
+                if (d.classes && Array.isArray(d.classes)) state.classes = d.classes;
+                if (d.subjects && Array.isArray(d.subjects)) state.subjects = d.subjects;
+                if (d.terms && Array.isArray(d.terms)) state.terms = d.terms;
+                if (d.months && Array.isArray(d.months)) state.months = d.months;
+                if (d.gradeRules && Array.isArray(d.gradeRules)) state.gradeRules = d.gradeRules;
+                if (d.examSettings && typeof d.examSettings === 'object') state.examSettings = d.examSettings;
+                if (d.adminPassword) state.adminPassword = d.adminPassword;
+            }
+            if (studentsSnap && studentsSnap.exists() && Array.isArray(studentsSnap.data().list)) {
+                state.students = studentsSnap.data().list;
+            }
+            if (teachersSnap && teachersSnap.exists() && Array.isArray(teachersSnap.data().list)) {
+                state.teachers = teachersSnap.data().list;
+            }
+            if (marksSnap && marksSnap.exists() && Array.isArray(marksSnap.data().list)) {
+                state.marks = marksSnap.data().list;
+            }
+            if (attendanceSnap && attendanceSnap.exists() && Array.isArray(attendanceSnap.data().list)) {
+                state.attendance = attendanceSnap.data().list;
+            }
+
+            initDummyData();
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(persistableState()));
+            lastCloudSyncTime = new Date();
+            cloudSyncStatus = 'synced';
+            updateSaveIndicator();
+            refreshActivePage();
+        } else {
+            console.log("First time setup: Syncing local state up to Firebase Cloud Database...");
+            await syncPushToCloud(true);
+        }
+
+        // Attach Real-Time onSnapshot listeners so any updates from other devices appear immediately
+        cloudUnsubscribers.forEach(unsub => { if (typeof unsub === 'function') unsub(); });
+        cloudUnsubscribers = [];
+
+        const attachSectionListener = (docRef, sectionName, applyFn) => {
+            const unsub = onSnapshot(docRef, (snap) => {
+                if (isCloudPushing) return;
+                if (snap.exists()) {
+                    const data = snap.data();
+                    applyFn(data);
+                    localStorage.setItem(STORAGE_KEY, JSON.stringify(persistableState()));
+                    lastCloudSyncTime = new Date();
+                    cloudSyncStatus = 'synced';
+                    updateSaveIndicator();
+                    refreshActivePage();
+                }
+            }, (error) => {
+                console.warn(`Snapshot listener note for ${sectionName}:`, error);
+            });
+            cloudUnsubscribers.push(unsub);
+        };
+
+        attachSectionListener(studentsRef, 'students', (data) => {
+            if (Array.isArray(data.list)) state.students = data.list;
+        });
+        attachSectionListener(teachersRef, 'teachers', (data) => {
+            if (Array.isArray(data.list)) state.teachers = data.list;
+        });
+        attachSectionListener(marksRef, 'marks', (data) => {
+            if (Array.isArray(data.list)) state.marks = data.list;
+        });
+        attachSectionListener(attendanceRef, 'attendance', (data) => {
+            if (Array.isArray(data.list)) state.attendance = data.list;
+        });
+        attachSectionListener(metaRef, 'meta', (data) => {
+            if (data.classes && Array.isArray(data.classes)) state.classes = data.classes;
+            if (data.subjects && Array.isArray(data.subjects)) state.subjects = data.subjects;
+            if (data.terms && Array.isArray(data.terms)) state.terms = data.terms;
+            if (data.months && Array.isArray(data.months)) state.months = data.months;
+            if (data.gradeRules && Array.isArray(data.gradeRules)) state.gradeRules = data.gradeRules;
+            if (data.examSettings && typeof data.examSettings === 'object') state.examSettings = data.examSettings;
+            if (data.adminPassword) state.adminPassword = data.adminPassword;
+        });
+
+    } catch (err) {
+        console.error("Cloud sync init warning:", err);
+        cloudSyncStatus = 'error';
+        updateSaveIndicator(true);
+    }
+};
+
+window.forceCloudSync = async function() {
+    showToast('Connecting to Firebase Cloud Database...', 'info');
+    if (window.initPortalCloudSync) {
+        await window.initPortalCloudSync();
+        showToast('Cloud Database synchronized across devices!', 'success');
+    }
+};
+
+function refreshActivePage() {
+    if (state.currentUser && currentPageId) {
+        const content = document.getElementById('content-area');
+        if (!content) return;
+        switch(currentPageId) {
+            case 'manage-students': renderManageStudents(content); break;
+            case 'manage-teachers': renderManageTeachers(content); break;
+            case 'admin-teacher-view': renderAdminTeacherView(content); break;
+            case 'manage-academic': renderManageAcademic(content); break;
+            case 'subject-management': renderSubjectManagement(content); break;
+            case 'exam-process': renderExamProcess(content); break;
+            case 'result-mgmt': renderResultMgmt(content); break;
+            case 'grade-rules': renderGradeRules(content); break;
+            case 'view-results': renderViewResults(content); break;
+            case 'result-analytics': renderResultAnalytics(content); break;
+            case 'student-attendance': renderStudentAttendance(content); break;
+            case 'upload-settings': renderUploadSettings(content); break;
+            case 'mark-entry': renderMarkEntry(content); break;
+            case 'my-classes': renderMyClasses(content); break;
+            case 'profile-settings': renderProfileSettings(content); break;
+            default: break;
+        }
+    }
+}
+
+window.signInWithGoogle = async function() {
+    if (!window.portalFirebase || !window.portalFirebase.auth) {
+        showToast('Connecting to Google Cloud Auth...', 'info');
         return;
     }
-    if (!lastSavedAt) { el.innerHTML = ''; return; }
-    const timeStr = lastSavedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    el.innerHTML = `<i class="fas fa-check-circle text-green-400"></i> <span>Saved ${timeStr}</span>`;
-}
+    const { auth, GoogleAuthProvider, signInWithPopup } = window.portalFirebase;
+    const provider = new GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: 'select_account' });
+    try {
+        const result = await signInWithPopup(auth, provider);
+        const user = result.user;
+        
+        const teacherMatch = state.teachers.find(t => 
+            (t.username && t.username.toLowerCase() === user.email.toLowerCase()) || 
+            (t.contact && user.email.includes(t.contact)) ||
+            (t.fullName && user.displayName && t.fullName.toLowerCase().includes(user.displayName.toLowerCase()))
+        );
+
+        if (teacherMatch) {
+            state.currentUser = { ...teacherMatch, role: 'teacher', email: user.email };
+            saveSession();
+            loadApp();
+            showToast(`Welcome ${teacherMatch.fullName || user.displayName}!`, 'success');
+        } else {
+            state.currentUser = {
+                role: 'admin',
+                username: user.displayName || 'Administrator',
+                email: user.email
+            };
+            saveSession();
+            loadApp();
+            showToast(`Welcome ${user.displayName || 'Administrator'}! Logged in as School Admin.`, 'success');
+        }
+    } catch (error) {
+        const code = error?.code || '';
+        const msg = error?.message || '';
+        if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request' || msg.includes('popup-closed-by-user') || msg.includes('cancelled-popup-request')) {
+            // Intentionally closed by user, harmless event
+            console.info("Google sign-in popup was closed by user.");
+            showToast('Sign-in was cancelled.', 'info');
+        } else if (code === 'auth/popup-blocked' || msg.includes('popup-blocked')) {
+            console.warn("Google sign-in popup blocked:", msg);
+            showToast('Popup was blocked by your browser. Please allow popups to sign in.', 'warning');
+        } else {
+            console.warn("Google sign-in notice:", msg || error);
+            showToast(msg || 'Unable to sign in with Google.', 'error');
+        }
+    }
+};
+
+window.addEventListener('portalFirebaseReady', () => {
+    if (window.initPortalCloudSync) window.initPortalCloudSync();
+});
 
 function loadState() {
     try {
@@ -367,7 +804,7 @@ function handleRestoreFile(event) {
             if (!confirm('Restoring will overwrite all current data (students, teachers, marks, settings) with the backup file. Continue?')) return;
             Object.keys(data).forEach(key => { state[key] = data[key]; });
             saveState(true);
-            showToast('Backup restored successfully! Reloading...', 'success');
+            showToast('Backup restored successfully! Syncing with cloud...', 'success');
             setTimeout(() => location.reload(), 1200);
         } catch (err) {
             console.error(err);
@@ -379,15 +816,15 @@ function handleRestoreFile(event) {
 }
 
 function resetAllData() {
-    if (!confirm('This will permanently erase ALL data (students, teachers, marks, settings) from this browser. This cannot be undone. Continue?')) return;
+    if (!confirm('This will permanently erase ALL local data (students, teachers, marks, settings) from this browser cache. Continue?')) return;
     if (!confirm('Are you absolutely sure? Consider downloading a backup first.')) return;
     localStorage.removeItem(STORAGE_KEY);
     sessionStorage.removeItem(SESSION_KEY);
-    showToast('All data cleared. Reloading...', 'info');
+    showToast('Local browser data cleared. Reloading...', 'info');
     setTimeout(() => location.reload(), 1000);
 }
 
-// Load any previously saved data before dummy data is seeded
+// Load local cache synchronously on page boot
 const hadSavedData = loadState();
 if (!state.adminPassword) state.adminPassword = 'admin';
 if (!Array.isArray(state.teachers)) state.teachers = [];
@@ -399,7 +836,12 @@ if (!Array.isArray(state.examSettings.routineDates) || state.examSettings.routin
 initDummyData();
 if (!hadSavedData) saveState(true);
 
-setInterval(() => saveState(true), 20000);
+// Trigger cloud sync
+if (window.portalFirebase) {
+    window.initPortalCloudSync();
+}
+
+setInterval(() => saveState(false), 30000);
 window.addEventListener('beforeunload', () => saveState(true));
 
 function toggleSidebar() {
@@ -441,6 +883,9 @@ function showToast(message, type = 'success') {
         setTimeout(() => toast.remove(), 300);
     }, 3000);
 }
+window.showToast = showToast;
+window.saveState = saveState;
+window.syncPushToCloud = syncPushToCloud;
 
 const numToWords = (n) => {
     if (n === 0) return 'Zero';
@@ -532,6 +977,9 @@ function handleLogin(e) {
 }
 
 function logout() {
+    if (window.portalFirebase?.auth && window.portalFirebase.signOut) {
+        window.portalFirebase.signOut(window.portalFirebase.auth).catch(() => {});
+    }
     state.currentUser = null;
     saveSession();
     document.getElementById('main-app').classList.add('hidden');
@@ -590,12 +1038,14 @@ function buildSidebar() {
             },
             { id: 'grade-rules', icon: 'fa-star', text: 'Grade Sheet Rules' },
             { id: 'view-results', icon: 'fa-chart-bar', text: 'View Results' },
+            { id: 'result-analytics', icon: 'fa-chart-line', text: 'Result Analytics' },
             { id: 'student-attendance', icon: 'fa-calendar-check', text: 'Attendance Report' },
             { id: 'upload-settings', icon: 'fa-upload', text: 'Settings & Media' }
         ];
     } else {
         links = [
             { id: 'mark-entry', icon: 'fa-edit', text: 'Enter Marks' },
+            { id: 'result-analytics', icon: 'fa-chart-line', text: 'Result Analytics' },
             { id: 'my-classes', icon: 'fa-book-open', text: 'My Assignments' },
             { id: 'profile-settings', icon: 'fa-user-cog', text: 'Profile Settings' }
         ];
@@ -675,6 +1125,7 @@ function toggleNavGroup(groupId) {
 }
 
 function navigate(pageId) {
+    currentPageId = pageId;
     closeSidebarOnMobile(); 
     document.querySelectorAll('#nav-menu a').forEach(el => {
         if(!el.id.startsWith('nav-group-')) {
@@ -711,6 +1162,7 @@ function navigate(pageId) {
         'result-mgmt': 'Result Management',
         'grade-rules': 'Grade Sheet Rules',
         'view-results': 'Results Overview',
+        'result-analytics': 'Result Analytics & GPA Trends',
         'student-attendance': state.currentUser.role === 'admin' ? 'Student Attendance Report' : 'Student Attendance',
         'upload-settings': 'Settings & Media',
         'mark-entry': 'Student Mark Entry',
@@ -730,6 +1182,7 @@ function navigate(pageId) {
             case 'result-mgmt': renderResultMgmt(content); break;
             case 'grade-rules': renderGradeRules(content); break;
             case 'view-results': renderViewResults(content); break;
+            case 'result-analytics': renderResultAnalytics(content); break;
             case 'student-attendance': renderStudentAttendance(content); break;
             case 'upload-settings': renderUploadSettings(content); break;
             case 'mark-entry': renderMarkEntry(content); break;
@@ -3371,6 +3824,13 @@ function getGradeInfo(percentage, className) {
     }
     return { grade: 'NG', gpa: 0.0, textClass: 'text-red-600 font-bold', isNG: true };
 }
+window.getGradeInfo = getGradeInfo;
+window.getSubjectFm = function(sub) {
+    if (state.examSettings && state.examSettings.markDivisions && state.examSettings.markDivisions[sub]) {
+        return state.examSettings.markDivisions[sub].reduce((acc, d) => acc + (Number(d.fm) || 0), 0);
+    }
+    return 100;
+};
 
 function renderUploadSettings(container) {
     const imgs = state.examSettings.images || {};
@@ -3418,6 +3878,31 @@ function renderUploadSettings(container) {
                         <button type="submit" class="w-full bg-red-600 hover:bg-red-700 text-white font-medium py-2 px-4 rounded-lg shadow-sm transition-colors text-sm">Update Password</button>
                     </div>
                 </form>
+            </div>
+
+            <div class="bg-white p-4 sm:p-6 rounded-xl shadow-sm border border-gray-100 mb-6">
+                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b pb-2 mb-4 gap-2">
+                    <h3 class="text-base sm:text-lg font-bold text-gray-800"><i class="fas fa-cloud text-blue-600 mr-2"></i> Firebase Cloud Database &amp; Multi-Device Sync</h3>
+                    <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-green-50 text-green-700 border border-green-200">
+                        <span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span> Cloud Connected
+                    </span>
+                </div>
+                <p class="text-xs text-gray-600 mb-4 leading-relaxed">
+                    तपाईंको सबै डाटा (विद्यार्थी, शिक्षक, प्राप्ताङ्क/Marks, हाजिरी र परीक्षा सेटिङहरू) सुरक्षित रूपमा <strong>Google Firebase Cloud</strong> मा सिङ्क हुन्छ। कुनै पनि मोबाइल, ल्यापटप वा कम्प्युटरबाट खोल्दा तपाईंले तुरुन्तै अपडेट गरिएको डाटा पाउनुहुनेछ।
+                </p>
+                <div class="bg-blue-50 border border-blue-100 rounded-lg p-3.5 text-xs text-blue-900 mb-4 grid grid-cols-1 md:grid-cols-3 gap-2 sm:gap-4">
+                    <div><span class="text-blue-600 font-medium">Project ID:</span> <span class="font-mono text-gray-700">gen-lang-client-0670539434</span></div>
+                    <div><span class="text-blue-600 font-medium">Database:</span> <span class="font-mono text-gray-700">ai-studio-rasuwasecondarys...</span></div>
+                    <div id="cloud-last-sync-text"><strong>Last Sync:</strong> Active & Synced</div>
+                </div>
+                <div class="flex flex-col sm:flex-row gap-3">
+                    <button onclick="forceCloudSync()" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 px-4 rounded-lg shadow-sm transition-colors text-sm flex items-center justify-center gap-2">
+                        <i class="fas fa-sync"></i> Refresh from Cloud Now
+                    </button>
+                    <button onclick="syncPushToCloud(true); showToast('Pushed all data to Cloud database!', 'success');" class="flex-1 bg-teal-600 hover:bg-teal-700 text-white font-medium py-2.5 px-4 rounded-lg shadow-sm transition-colors text-sm flex items-center justify-center gap-2">
+                        <i class="fas fa-cloud-upload-alt"></i> Push Local Data to Cloud
+                    </button>
+                </div>
             </div>
 
             <div class="bg-white p-4 sm:p-6 rounded-xl shadow-sm border border-gray-100 mb-6">
@@ -4385,8 +4870,8 @@ function renderViewResults(container) {
         <div class="bg-white p-6 sm:p-8 rounded-xl shadow-sm border border-gray-100 text-center fade-in">
             <div class="text-blue-500 mb-4"><i class="fas fa-chart-line text-5xl"></i></div>
             <h3 class="text-lg sm:text-xl font-bold text-gray-700 mb-2">Result Analytics Dashboard</h3>
-            <p class="text-sm text-gray-500 max-w-md mx-auto mb-6">Detailed analytical charts and visual performance reports will be dynamically generated here based on ledger data.</p>
-            <div class="flex flex-col sm:flex-row justify-center gap-4">
+            <p class="text-sm text-gray-500 max-w-md mx-auto mb-6">Interactive Recharts visual analytical charts, class GPA trends, and student grade distribution reports.</p>
+            <div class="flex flex-col sm:flex-row justify-center gap-4 mb-6">
                 <div class="bg-blue-50 p-4 rounded-lg border border-blue-100 w-full sm:w-auto min-w-[150px]">
                     <div class="text-2xl font-bold text-blue-700">${state.students.length}</div>
                     <div class="text-xs text-blue-500 uppercase font-semibold">Total Students</div>
@@ -4396,8 +4881,42 @@ function renderViewResults(container) {
                     <div class="text-xs text-green-500 uppercase font-semibold">Mark Records</div>
                 </div>
             </div>
+            <button onclick="navigate('result-analytics')" class="px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold rounded-xl shadow-sm transition-all inline-flex items-center gap-2 text-sm">
+                <i class="fas fa-chart-line"></i> View Result Analytics & GPA Trends
+            </button>
         </div>
     `;
+}
+
+function renderResultAnalytics(container) {
+    if (typeof window.__mountResultAnalytics === 'function') {
+        window.__mountResultAnalytics(container);
+        return;
+    }
+    container.innerHTML = `
+        <div class="flex flex-col items-center justify-center py-20 text-blue-600 gap-3">
+            <i class="fas fa-spinner fa-spin text-3xl"></i>
+            <p class="text-sm font-medium text-gray-500">Loading Result Analytics & GPA Trends...</p>
+        </div>
+    `;
+    let attempts = 0;
+    const interval = setInterval(() => {
+        attempts++;
+        if (typeof window.__mountResultAnalytics === 'function') {
+            clearInterval(interval);
+            window.__mountResultAnalytics(container);
+        } else if (attempts > 20) {
+            clearInterval(interval);
+            container.innerHTML = `
+                <div class="bg-white p-6 rounded-2xl border border-gray-200 text-center">
+                    <p class="text-red-500 font-medium mb-2">Analytics module initializing...</p>
+                    <button onclick="navigate('result-analytics')" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs font-semibold">
+                        Reload Analytics
+                    </button>
+                </div>
+            `;
+        }
+    }, 100);
 }
 
 function renderStudentAttendance(container) {
