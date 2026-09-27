@@ -4,6 +4,46 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Rasuwa Secondary School Examination Portal</title>
+    <!-- Circular Structure Safety Guard for JSON.stringify -->
+    <script>
+        (function() {
+            var nativeStringify = JSON.stringify;
+            function createSafeReplacer(customReplacer) {
+                var seen = new WeakSet();
+                return function(key, val) {
+                    if (typeof val === 'object' && val !== null) {
+                        if (seen.has(val)) {
+                            return '[Circular]';
+                        }
+                        seen.add(val);
+                    }
+                    if (typeof customReplacer === 'function') {
+                        return customReplacer.call(this, key, val);
+                    }
+                    return val;
+                };
+            }
+            JSON.stringify = function(value, replacer, space) {
+                try {
+                    if (typeof replacer === 'function') {
+                        return nativeStringify(value, createSafeReplacer(replacer), space);
+                    } else if (Array.isArray(replacer)) {
+                        return nativeStringify(value, replacer, space);
+                    }
+                    return nativeStringify(value, createSafeReplacer(), space);
+                } catch (err) {
+                    if (err instanceof TypeError && String(err.message).toLowerCase().includes('circular')) {
+                        try {
+                            return nativeStringify(value, createSafeReplacer(), space);
+                        } catch (fallbackErr) {
+                            return '"[Circular]"';
+                        }
+                    }
+                    throw err;
+                }
+            };
+        })();
+    </script>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- FontAwesome for Icons -->
@@ -138,24 +178,6 @@
                     <i class="fas fa-arrow-right"></i>
                 </button>
             </form>
-
-            <div class="relative my-4">
-                <div class="absolute inset-0 flex items-center"><div class="w-full border-t border-gray-200"></div></div>
-                <div class="relative flex justify-center text-xs uppercase"><span class="bg-white px-2 text-gray-400">or Google Cloud Login</span></div>
-            </div>
-
-            <button type="button" onclick="signInWithGoogle()" class="w-full bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 font-medium py-2 px-4 rounded-lg shadow-sm transition-colors flex justify-center items-center gap-2 text-sm">
-                <svg class="w-4 h-4" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/></svg>
-                <span>Continue with Google</span>
-            </button>
-
-            <div class="mt-4 text-center text-xs text-gray-400">
-                <p id="login-hint">Hint: Admin login is admin / admin</p>
-                <div class="mt-2 text-blue-600 font-medium flex items-center justify-center gap-1.5">
-                    <i class="fas fa-database text-xs"></i> <span>Firebase Cloud Sync Active</span>
-                </div>
-            </div>
-
         </div>
     </div>
 
@@ -196,12 +218,9 @@
                     <h2 class="text-lg sm:text-xl font-bold text-gray-800 truncate" id="page-title">Dashboard</h2>
                 </div>
                 <div class="flex items-center gap-2 sm:gap-3">
-                    <div id="save-indicator" onclick="forceCloudSync()" title="Data synced to Firebase Cloud. Click to refresh sync." class="hidden sm:flex items-center gap-1.5 text-xs text-gray-600 bg-gray-50 hover:bg-gray-100 border border-gray-200 px-2.5 py-1.5 rounded-full transition-colors cursor-pointer select-none">
-                        <i class="fas fa-cloud text-green-500"></i>
-                        <span class="text-green-700 font-medium">Cloud Active</span>
-                    </div>
-                    <button onclick="forceCloudSync()" title="Refresh Cloud Sync" class="sm:hidden w-8 h-8 rounded-full bg-blue-50 text-blue-600 hover:bg-blue-100 flex items-center justify-center border border-blue-200 text-xs">
-                        <i class="fas fa-sync"></i>
+                    <button id="header-sync-btn" onclick="triggerManualSync()" title="Click to sync all data with Firebase Cloud" class="flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 shadow-sm transition-all cursor-pointer">
+                        <i class="fas fa-check-circle text-emerald-600" id="header-sync-icon"></i>
+                        <span id="header-sync-text">Synced</span>
                     </button>
                     <div class="hidden sm:block text-right">
                         <p class="font-medium text-sm text-gray-700 leading-tight" id="logged-username">Admin</p>
@@ -397,122 +416,230 @@ var lastSavedAt = null;
 var cloudSaveTimer = null;
 var cloudSyncStatus = 'connecting';
 var isCloudPushing = false;
+var hasPendingPush = false;
+var dirtySections = new Set();
 var cloudUnsubscribers = [];
 var lastCloudSyncTime = null;
 var currentPageId = null;
+var isCloudSyncInitializing = false;
+var refreshDebounceTimer = null;
+
+function markDirty(section) {
+    if (section) {
+        dirtySections.add(section);
+    } else {
+        dirtySections.add('meta');
+        dirtySections.add('students');
+        dirtySections.add('teachers');
+        dirtySections.add('marks');
+        dirtySections.add('attendance');
+    }
+}
 
 function persistableState() {
-    const { currentUser, ...rest } = state;
-    return rest;
+    return {
+        students: Array.isArray(state.students) ? state.students : [],
+        teachers: Array.isArray(state.teachers) ? state.teachers : [],
+        marks: Array.isArray(state.marks) ? state.marks : [],
+        attendance: Array.isArray(state.attendance) ? state.attendance : [],
+        classes: Array.isArray(state.classes) ? state.classes : ['Class 8', 'Class 9', 'Class 10', 'Class 11', 'Class 12'],
+        subjects: Array.isArray(state.subjects) ? state.subjects : ['Comp. Nepali', 'Comp. English', 'Comp. Math', 'Comp. Science', 'Comp. Social Studies'],
+        terms: Array.isArray(state.terms) ? state.terms : ['First Term', 'Second Term', 'Final Term'],
+        months: Array.isArray(state.months) ? state.months : ['Baisakh', 'Jestha', 'Ashadh', 'Shrawan', 'Bhadra', 'Ashwin', 'Kartik', 'Mangsir', 'Poush', 'Magh', 'Falgun', 'Chaitra'],
+        gradeRules: Array.isArray(state.gradeRules) ? state.gradeRules : [],
+        examSettings: (state.examSettings && typeof state.examSettings === 'object') ? state.examSettings : {},
+        adminPassword: state.adminPassword || 'admin'
+    };
 }
 
 function updateSaveIndicator(failed, overrideStatus) {
-    const el = document.getElementById('save-indicator');
-    if (!el) return;
-    el.classList.remove('hidden');
-    el.classList.add('flex');
+    const btn = document.getElementById('header-sync-btn');
+    const icon = document.getElementById('header-sync-icon');
+    const text = document.getElementById('header-sync-text');
+    if (!btn || !icon || !text) return;
 
     if (failed || cloudSyncStatus === 'error') {
-        el.innerHTML = '<i class="fas fa-exclamation-triangle text-amber-500"></i> <span class="text-amber-700 font-medium">Offline / Local Save</span>';
-        el.title = 'Saved locally in browser. Click to retry cloud sync.';
+        btn.className = "flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-300 shadow-sm transition-all cursor-pointer";
+        icon.className = "fas fa-exclamation-triangle text-amber-600";
+        text.innerText = "Offline (Click to Sync)";
+        btn.title = "Saved locally. Click to retry syncing with Firebase Cloud.";
         return;
     }
 
     if (overrideStatus === 'syncing' || isCloudPushing) {
-        el.innerHTML = '<i class="fas fa-sync fa-spin text-blue-500"></i> <span class="text-blue-600 font-medium">Cloud Syncing...</span>';
-        el.title = 'Synchronizing with Firebase Cloud Database';
+        btn.className = "flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200 shadow-sm transition-all cursor-wait";
+        icon.className = "fas fa-sync fa-spin text-blue-600";
+        text.innerText = "Syncing...";
+        btn.title = "Synchronizing with Firebase Cloud...";
+        return;
+    }
+
+    if (dirtySections.size > 0) {
+        btn.className = "flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white shadow transition-all cursor-pointer";
+        icon.className = "fas fa-cloud-upload-alt text-white animate-bounce";
+        text.innerText = "Sync Changes";
+        btn.title = "Local changes saved. Click to upload to Firebase Cloud.";
         return;
     }
 
     const t = lastCloudSyncTime || lastSavedAt;
     const timeStr = t ? t.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
-    el.innerHTML = `<i class="fas fa-cloud text-green-500"></i> <span class="text-green-700 font-medium">Cloud Synced ${timeStr}</span>`;
-    el.title = 'Data safely stored in Firebase Cloud Database. Click to refresh.';
+    btn.className = "flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 shadow-sm transition-all cursor-pointer";
+    icon.className = "fas fa-check-circle text-emerald-600";
+    text.innerText = timeStr ? `Synced (${timeStr})` : "Synced";
+    btn.title = "All records synchronized with Firebase Cloud. Click to sync again.";
 }
 
-function saveState(immediate) {
-    const doSave = () => {
-        try {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(persistableState()));
-            lastSavedAt = new Date();
-            updateSaveIndicator(false, 'syncing');
-            syncPushToCloud(immediate);
-        } catch (err) {
-            console.error('Auto-save failed:', err);
-            updateSaveIndicator(true);
+function saveState(immediate, section) {
+    markDirty(section);
+    // 1. Instant local persistence: 0ms delay, zero input lag
+    try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(persistableState()));
+        lastSavedAt = new Date();
+    } catch (err) {
+        console.error('Local save error:', err);
+    }
+    updateSaveIndicator();
+
+    // 2. Cloud synchronization: immediate when saving forms, or debounced when typing
+    if (immediate) {
+        clearTimeout(cloudSaveTimer);
+        syncPushToCloud(true);
+        return;
+    }
+
+    clearTimeout(cloudSaveTimer);
+    cloudSaveTimer = setTimeout(() => {
+        syncPushToCloud(false);
+    }, 4000);
+}
+
+window.triggerManualSync = async function() {
+    if (isCloudPushing) return;
+    markDirty();
+    updateSaveIndicator(false, 'syncing');
+    showToast('Connecting and syncing with Firebase Cloud...', 'info');
+    try {
+        await syncPushToCloud(true);
+        if (window.initPortalCloudSync) {
+            await window.initPortalCloudSync();
         }
-    };
-    if (immediate) { doSave(); return; }
-    clearTimeout(saveTimer);
-    saveTimer = setTimeout(doSave, 600);
-}
+        showToast('All school records synced with Cloud successfully!', 'success');
+    } catch (e) {
+        console.error('Manual sync failed:', e);
+        showToast('Sync encountered an issue. Check connection.', 'error');
+        updateSaveIndicator(true);
+    }
+};
+window.forceCloudSync = window.triggerManualSync;
 
-function syncPushToCloud(immediate) {
+function syncPushToCloud(immediate, section) {
+    if (section) markDirty(section);
     if (!window.portalFirebase || !window.portalFirebase.db) return;
+
     const doPush = async () => {
-        if (isCloudPushing) return;
+        if (isCloudPushing) {
+            hasPendingPush = true;
+            return;
+        }
+        if (dirtySections.size === 0) {
+            updateSaveIndicator();
+            return;
+        }
+
         isCloudPushing = true;
+        hasPendingPush = false;
         updateSaveIndicator(false, 'syncing');
+
+        const sectionsToPush = new Set(dirtySections);
+        dirtySections.clear();
+
         try {
             const { db, doc, setDoc, handleFirestoreError, OperationType } = window.portalFirebase;
             const nowIso = new Date().toISOString();
-            const author = state.currentUser ? (state.currentUser.username || state.currentUser.fullName || state.currentUser.email || 'Admin') : 'System';
+            const rawAuthor = state.currentUser ? (state.currentUser.username || state.currentUser.fullName || state.currentUser.email || 'Admin') : 'System';
+            const author = String(rawAuthor).substring(0, 100);
 
-            // 1. Meta settings (classes, subjects, terms, months, rules, examSettings, password)
-            const metaPayload = {
-                id: 'meta',
-                sectionName: 'Academic Settings & Rules',
-                adminPassword: state.adminPassword || 'admin',
-                classes: state.classes || [],
-                subjects: state.subjects || [],
-                terms: state.terms || [],
-                months: state.months || [],
-                gradeRules: state.gradeRules || [],
-                examSettings: state.examSettings || {},
-                updatedAt: nowIso,
-                updatedBy: author
-            };
-            await setDoc(doc(db, 'school_portal', 'meta'), metaPayload).catch(e => handleFirestoreError(e, OperationType.WRITE, 'school_portal/meta'));
+            const pushTasks = [];
 
-            // 2. Students list
-            const studentsPayload = {
-                id: 'students',
-                sectionName: 'Student Records',
-                list: state.students || [],
-                updatedAt: nowIso,
-                updatedBy: author
-            };
-            await setDoc(doc(db, 'school_portal', 'students'), studentsPayload).catch(e => handleFirestoreError(e, OperationType.WRITE, 'school_portal/students'));
+            if (sectionsToPush.has('meta')) {
+                const metaPayload = {
+                    id: 'meta',
+                    sectionName: 'Academic Settings & Rules',
+                    adminPassword: state.adminPassword || 'admin',
+                    classes: state.classes || [],
+                    subjects: state.subjects || [],
+                    terms: state.terms || [],
+                    months: state.months || [],
+                    gradeRules: state.gradeRules || [],
+                    examSettings: state.examSettings || {},
+                    updatedAt: nowIso,
+                    updatedBy: author
+                };
+                pushTasks.push(
+                    setDoc(doc(db, 'school_portal', 'meta'), metaPayload)
+                        .catch(e => handleFirestoreError(e, OperationType.WRITE, 'school_portal/meta'))
+                );
+            }
 
-            // 3. Teachers list
-            const teachersPayload = {
-                id: 'teachers',
-                sectionName: 'Teacher Records',
-                list: state.teachers || [],
-                updatedAt: nowIso,
-                updatedBy: author
-            };
-            await setDoc(doc(db, 'school_portal', 'teachers'), teachersPayload).catch(e => handleFirestoreError(e, OperationType.WRITE, 'school_portal/teachers'));
+            if (sectionsToPush.has('students')) {
+                const studentsPayload = {
+                    id: 'students',
+                    sectionName: 'Student Records',
+                    list: state.students || [],
+                    updatedAt: nowIso,
+                    updatedBy: author
+                };
+                pushTasks.push(
+                    setDoc(doc(db, 'school_portal', 'students'), studentsPayload)
+                        .catch(e => handleFirestoreError(e, OperationType.WRITE, 'school_portal/students'))
+                );
+            }
 
-            // 4. Marks records
-            const marksPayload = {
-                id: 'marks',
-                sectionName: 'Examination Marks',
-                list: state.marks || [],
-                updatedAt: nowIso,
-                updatedBy: author
-            };
-            await setDoc(doc(db, 'school_portal', 'marks'), marksPayload).catch(e => handleFirestoreError(e, OperationType.WRITE, 'school_portal/marks'));
+            if (sectionsToPush.has('teachers')) {
+                const teachersPayload = {
+                    id: 'teachers',
+                    sectionName: 'Teacher Records',
+                    list: state.teachers || [],
+                    updatedAt: nowIso,
+                    updatedBy: author
+                };
+                pushTasks.push(
+                    setDoc(doc(db, 'school_portal', 'teachers'), teachersPayload)
+                        .catch(e => handleFirestoreError(e, OperationType.WRITE, 'school_portal/teachers'))
+                );
+            }
 
-            // 5. Attendance records
-            const attendancePayload = {
-                id: 'attendance',
-                sectionName: 'Student Attendance',
-                list: state.attendance || [],
-                updatedAt: nowIso,
-                updatedBy: author
-            };
-            await setDoc(doc(db, 'school_portal', 'attendance'), attendancePayload).catch(e => handleFirestoreError(e, OperationType.WRITE, 'school_portal/attendance'));
+            if (sectionsToPush.has('marks')) {
+                const marksPayload = {
+                    id: 'marks',
+                    sectionName: 'Examination Marks',
+                    list: state.marks || [],
+                    updatedAt: nowIso,
+                    updatedBy: author
+                };
+                pushTasks.push(
+                    setDoc(doc(db, 'school_portal', 'marks'), marksPayload)
+                        .catch(e => handleFirestoreError(e, OperationType.WRITE, 'school_portal/marks'))
+                );
+            }
+
+            if (sectionsToPush.has('attendance')) {
+                const attendancePayload = {
+                    id: 'attendance',
+                    sectionName: 'Student Attendance',
+                    list: state.attendance || [],
+                    updatedAt: nowIso,
+                    updatedBy: author
+                };
+                pushTasks.push(
+                    setDoc(doc(db, 'school_portal', 'attendance'), attendancePayload)
+                        .catch(e => handleFirestoreError(e, OperationType.WRITE, 'school_portal/attendance'))
+                );
+            }
+
+            // High-speed parallel push of all modified sections
+            await Promise.all(pushTasks);
 
             lastCloudSyncTime = new Date();
             cloudSyncStatus = 'synced';
@@ -521,20 +648,38 @@ function syncPushToCloud(immediate) {
             if (badge) badge.innerHTML = `<strong>Last Sync:</strong> ${lastCloudSyncTime.toLocaleTimeString()}`;
         } catch (err) {
             console.error('Cloud push error:', err);
+            sectionsToPush.forEach(s => dirtySections.add(s));
             cloudSyncStatus = 'error';
             updateSaveIndicator(true);
         } finally {
             isCloudPushing = false;
+            if (hasPendingPush && cloudSyncStatus !== 'error') {
+                hasPendingPush = false;
+                setTimeout(() => syncPushToCloud(true), 300);
+            }
         }
     };
 
-    if (immediate) { doPush(); return; }
+    if (immediate) {
+        clearTimeout(cloudSaveTimer);
+        doPush();
+        return;
+    }
     clearTimeout(cloudSaveTimer);
-    cloudSaveTimer = setTimeout(doPush, 1000);
+    cloudSaveTimer = setTimeout(doPush, 400);
+}
+
+function debouncedRefreshActivePage() {
+    clearTimeout(refreshDebounceTimer);
+    refreshDebounceTimer = setTimeout(() => {
+        refreshActivePage();
+    }, 150);
 }
 
 window.initPortalCloudSync = async function() {
+    if (isCloudSyncInitializing) return;
     if (!window.portalFirebase || !window.portalFirebase.db) return;
+    isCloudSyncInitializing = true;
     const { db, doc, getDoc, onSnapshot, handleFirestoreError, OperationType, testConnection } = window.portalFirebase;
 
     try {
@@ -597,12 +742,14 @@ window.initPortalCloudSync = async function() {
 
             initDummyData();
             localStorage.setItem(STORAGE_KEY, JSON.stringify(persistableState()));
+            dirtySections.clear();
             lastCloudSyncTime = new Date();
             cloudSyncStatus = 'synced';
             updateSaveIndicator();
-            refreshActivePage();
+            debouncedRefreshActivePage();
         } else {
             console.log("First time setup: Syncing local state up to Firebase Cloud Database...");
+            markDirty();
             await syncPushToCloud(true);
         }
 
@@ -611,7 +758,12 @@ window.initPortalCloudSync = async function() {
         cloudUnsubscribers = [];
 
         const attachSectionListener = (docRef, sectionName, applyFn) => {
+            let isFirst = true; // Skip initial fire to prevent double-render and blinking
             const unsub = onSnapshot(docRef, (snap) => {
+                if (isFirst) {
+                    isFirst = false;
+                    return;
+                }
                 if (isCloudPushing) return;
                 if (snap.exists()) {
                     const data = snap.data();
@@ -620,7 +772,7 @@ window.initPortalCloudSync = async function() {
                     lastCloudSyncTime = new Date();
                     cloudSyncStatus = 'synced';
                     updateSaveIndicator();
-                    refreshActivePage();
+                    debouncedRefreshActivePage();
                 }
             }, (error) => {
                 console.warn(`Snapshot listener note for ${sectionName}:`, error);
@@ -654,6 +806,8 @@ window.initPortalCloudSync = async function() {
         console.error("Cloud sync init warning:", err);
         cloudSyncStatus = 'error';
         updateSaveIndicator(true);
+    } finally {
+        isCloudSyncInitializing = false;
     }
 };
 
@@ -666,6 +820,10 @@ window.forceCloudSync = async function() {
 };
 
 function refreshActivePage() {
+    const activeEl = document.activeElement;
+    if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.tagName === 'SELECT')) {
+        return;
+    }
     if (state.currentUser && currentPageId) {
         const content = document.getElementById('content-area');
         if (!content) return;
@@ -768,8 +926,22 @@ function loadSession() {
 
 function saveSession() {
     try {
-        if (state.currentUser) sessionStorage.setItem(SESSION_KEY, JSON.stringify(state.currentUser));
-        else sessionStorage.removeItem(SESSION_KEY);
+        if (state.currentUser) {
+            const cleanUser = {
+                role: state.currentUser.role || 'teacher',
+                username: state.currentUser.username || '',
+                fullName: state.currentUser.fullName || '',
+                id: state.currentUser.id || '',
+                email: state.currentUser.email || '',
+                contact: state.currentUser.contact || '',
+                assignments: Array.isArray(state.currentUser.assignments) ? state.currentUser.assignments : [],
+                classTeacherOf: Array.isArray(state.currentUser.classTeacherOf) ? state.currentUser.classTeacherOf : [],
+                impersonating: !!state.currentUser.impersonating
+            };
+            sessionStorage.setItem(SESSION_KEY, JSON.stringify(cleanUser));
+        } else {
+            sessionStorage.removeItem(SESSION_KEY);
+        }
     } catch (err) { /* ignore */ }
 }
 
@@ -834,15 +1006,22 @@ if (!state.examSettings || typeof state.examSettings !== 'object') state.examSet
 if (!state.examSettings.routines || typeof state.examSettings.routines !== 'object') state.examSettings.routines = {};
 if (!Array.isArray(state.examSettings.routineDates) || state.examSettings.routineDates.length === 0) state.examSettings.routineDates = [''];
 initDummyData();
-if (!hadSavedData) saveState(true);
-
-// Trigger cloud sync
-if (window.portalFirebase) {
-    window.initPortalCloudSync();
+if (!hadSavedData) {
+    try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(persistableState()));
+    } catch (e) {}
 }
 
-setInterval(() => saveState(false), 30000);
-window.addEventListener('beforeunload', () => saveState(true));
+setInterval(() => {
+    if (dirtySections.size > 0) {
+        saveState(false);
+    }
+}, 30000);
+window.addEventListener('beforeunload', () => {
+    if (dirtySections.size > 0) {
+        saveState(true);
+    }
+});
 
 function toggleSidebar() {
     const sidebar = document.getElementById('sidebar');
@@ -867,7 +1046,6 @@ function closeSidebarOnMobile() {
 }
 
 function showToast(message, type = 'success') {
-    saveState();
     const container = document.getElementById('toast-container');
     if (!container) return;
     const toast = document.createElement('div');
@@ -942,11 +1120,11 @@ function switchLoginTab(role) {
     if (role === 'admin') {
         tabAdmin.className = "flex-1 py-2 text-sm font-semibold rounded-md bg-white shadow text-blue-600 transition-all";
         tabTeacher.className = "flex-1 py-2 text-sm font-semibold rounded-md text-gray-500 hover:text-gray-700 transition-all";
-        hint.innerText = "Hint: Admin login is admin / admin";
+        if (hint) hint.innerText = "Hint: Admin login is admin / admin";
     } else {
         tabTeacher.className = "flex-1 py-2 text-sm font-semibold rounded-md bg-white shadow text-blue-600 transition-all";
         tabAdmin.className = "flex-1 py-2 text-sm font-semibold rounded-md text-gray-500 hover:text-gray-700 transition-all";
-        hint.innerText = "Hint: Use teacher credentials generated by Admin";
+        if (hint) hint.innerText = "Hint: Use teacher credentials generated by Admin";
     }
 }
 
@@ -1008,11 +1186,17 @@ function loadApp() {
     document.getElementById('logged-username').innerText = dName.length > 15 ? dName.substring(0,12)+'...' : dName;
     buildSidebar();
     updateSaveIndicator();
-    if(state.currentUser.role === 'admin') {
-        navigate('manage-students');
-    } else {
-        navigate('mark-entry');
-    }
+    let targetPage = state.currentUser.role === 'admin' ? 'manage-students' : 'mark-entry';
+    try {
+        const saved = sessionStorage.getItem('rss_current_page_v1');
+        const adminPages = ['manage-students', 'manage-teachers', 'admin-teacher-view', 'manage-academic', 'subject-management', 'exam-process', 'result-mgmt', 'grade-rules', 'view-results', 'result-analytics', 'student-attendance', 'upload-settings'];
+        const teacherPages = ['mark-entry', 'my-classes', 'student-attendance', 'profile-settings', 'view-results', 'result-analytics'];
+        const allowed = state.currentUser.role === 'admin' ? adminPages : teacherPages;
+        if (saved && allowed.includes(saved)) {
+            targetPage = saved;
+        }
+    } catch (e) {}
+    navigate(targetPage);
 }
 
 function buildSidebar() {
@@ -1126,6 +1310,9 @@ function toggleNavGroup(groupId) {
 
 function navigate(pageId) {
     currentPageId = pageId;
+    try {
+        sessionStorage.setItem('rss_current_page_v1', pageId);
+    } catch (e) {}
     closeSidebarOnMobile(); 
     document.querySelectorAll('#nav-menu a').forEach(el => {
         if(!el.id.startsWith('nav-group-')) {
@@ -3559,7 +3746,7 @@ function renderMarkEntryGrid(container, cls, sub, term, editable) {
                         <input type="number" step="0.01" min="0" max="${d.fm}" value="${val}"
                             class="mark-input w-20 px-1.5 py-1 border border-gray-200 rounded text-center text-sm focus:ring-2 focus:ring-blue-500 outline-none"
                             data-student="${student.id}" data-idx="${d.originalIndex}" data-fm="${d.fm}"
-                            oninput="onMarkInputChange(this)" onkeydown="handleMarkInputKeydown(event, this)">
+                            oninput="onMarkInputChange(this)" onblur="onMarkInputBlur(this)" onkeydown="handleMarkInputKeydown(event, this)">
                     </td>`;
                 } else {
                     cellsHtml += `<td class="px-2 py-2 border border-gray-300 text-center">${val === '' ? '-' : val}</td>`;
@@ -3600,9 +3787,42 @@ function renderMarkEntryGrid(container, cls, sub, term, editable) {
     `;
 }
 
+function commitStudentMarks(studentId) {
+    if (!markEntryCtx) return;
+    const { cls, sub, term, divs } = markEntryCtx;
+    if (!term || !studentId) return;
+
+    let components = {};
+    let hasAnyValue = false;
+    divs.forEach(d => {
+        const inp = document.querySelector(`.mark-input[data-student="${studentId}"][data-idx="${d.originalIndex}"]`);
+        if (inp && inp.value !== '') {
+            components[d.originalIndex] = Number(inp.value);
+            hasAnyValue = true;
+        }
+    });
+
+    let markRecord = state.marks.find(m => m.studentId === studentId && m.term === term && m.subject === sub);
+    if (hasAnyValue) {
+        if (markRecord) {
+            markRecord.components = components;
+        } else {
+            state.marks.push({ studentId, term, subject: sub, className: cls, components });
+        }
+    } else if (markRecord) {
+        markRecord.components = {};
+    }
+}
+
 function handleMarkInputKeydown(event, input) {
     if (event.key !== 'Enter') return;
     event.preventDefault();
+
+    const studentId = input.getAttribute('data-student');
+    if (studentId) {
+        commitStudentMarks(studentId);
+        saveState(false, 'marks');
+    }
 
     const idx = input.getAttribute('data-idx');
     const inputs = Array.from(document.querySelectorAll('.mark-input'))
@@ -3634,6 +3854,19 @@ function onMarkInputChange(input) {
     });
     const totalCell = document.getElementById(`me-total-${studentId}`);
     if (totalCell) totalCell.innerText = total;
+
+    if (studentId) {
+        commitStudentMarks(studentId);
+        saveState(false, 'marks');
+    }
+}
+
+function onMarkInputBlur(input) {
+    const studentId = input.getAttribute('data-student');
+    if (studentId) {
+        commitStudentMarks(studentId);
+        saveState(false, 'marks');
+    }
 }
 
 function saveMarkEntryGrid() {
@@ -3678,6 +3911,7 @@ function saveMarkEntryGrid() {
         savedCount++;
     });
 
+    saveState(true, 'marks');
     showToast(`Marks saved successfully for ${savedCount} student(s) in ${sub} (${term}).`, 'success');
 }
 
