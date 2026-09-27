@@ -357,14 +357,22 @@ function renderManageTeachers(container) {
             <div class="col-span-1 flex flex-col gap-4 sm:gap-6">
                 
                 <div class="bg-white p-4 sm:p-6 rounded-xl shadow-sm border border-gray-100">
-                    <h3 class="text-base sm:text-lg font-semibold text-gray-800 mb-2">Upload Teachers (Excel)</h3>
-                    <div class="border-2 border-dashed border-gray-300 rounded-xl p-4 sm:p-6 text-center bg-gray-50 hover:bg-gray-100 transition-colors cursor-pointer" onclick="document.getElementById('excel-teacher-file').click()">
+                    <div class="flex items-center justify-between mb-2">
+                        <h3 class="text-base sm:text-lg font-semibold text-gray-800">Upload Teachers (Excel)</h3>
+                        <span class="text-xs bg-red-50 text-red-600 font-semibold px-2 py-0.5 rounded border border-red-200">Gmail Compulsory</span>
+                    </div>
+                    <p class="text-xs text-gray-500 mb-3">एक्सेल फाइलबाट शिक्षकहरूको विवरण एकमुष्ट अपलोड गर्नुहोस्। प्रत्येक शिक्षकको <strong>Gmail</strong> अनिवार्य छ।</p>
+                    <div class="border-2 border-dashed border-gray-300 rounded-xl p-4 sm:p-5 text-center bg-gray-50 hover:bg-gray-100 transition-colors cursor-pointer" onclick="document.getElementById('excel-teacher-file').click()">
                         <i class="fas fa-file-excel text-3xl sm:text-4xl text-green-600 mb-2"></i>
                         <input type="file" id="excel-teacher-file" accept=".xlsx, .xls, .csv" class="hidden" onchange="handleTeacherExcelUpload(event)">
-                        <button class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm w-full mt-2">
-                            Browse File
+                        <button type="button" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm w-full mt-1 cursor-pointer">
+                            <i class="fas fa-file-upload mr-1"></i> Browse Excel File
                         </button>
                     </div>
+                    <button type="button" onclick="downloadTeacherExcelTemplate()" class="mt-3 text-xs text-blue-600 hover:text-blue-800 font-medium flex items-center justify-center gap-1.5 w-full py-1.5 border border-blue-200 rounded-lg bg-blue-50/50 hover:bg-blue-50 transition-colors cursor-pointer">
+                        <i class="fas fa-download"></i> Download Sample Excel Template (.xlsx)
+                    </button>
+                    <p class="text-[11px] text-gray-500 mt-2 text-center">Required columns: <strong>Full Name</strong>, <strong>Gmail</strong>, <strong>Contact Number</strong></p>
                 </div>
 
                 <div class="bg-white p-4 sm:p-6 rounded-xl shadow-sm border border-gray-100">
@@ -378,12 +386,19 @@ function renderManageTeachers(container) {
                             </select>
                         </div>
 
-                        <div id="new-teacher-fields" class="block">
-                            <div class="mb-4">
-                                <label class="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
-                                <input type="text" id="t-fullname" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm" placeholder="e.g. Chandra Shekhar Kasula">
+                        <div id="new-teacher-fields" class="block space-y-3 mb-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Full Name <span class="text-red-500 font-bold">*</span></label>
+                                <input type="text" id="t-fullname" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm" placeholder="e.g. Chandra Shekhar Kasula" required>
                             </div>
-                            <div class="mb-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">
+                                    <i class="fab fa-google text-red-500 mr-1"></i>Gmail / Email (Compulsory) <span class="text-red-500 font-bold">*</span>
+                                </label>
+                                <input type="email" id="t-email" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm" placeholder="e.g. teacher@gmail.com" required>
+                                <p class="text-[11px] text-gray-500 mt-1">यही Gmail बाट शिक्षकले Google Sign-In मार्फत सिधै आफ्नो प्रोफाइलमा लगइन गर्न पाउनेछन्।</p>
+                            </div>
+                            <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-1">Contact Number</label>
                                 <input type="tel" id="t-contact" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm" placeholder="e.g. 9841000000">
                             </div>
@@ -447,6 +462,19 @@ function generateTeacherCredentials(fullName, contactNum) {
     return { username, password };
 }
 
+function downloadTeacherExcelTemplate() {
+    const templateData = [
+        { "Full Name": "Ram Bahadur Shrestha", "Gmail": "ram.shrestha@gmail.com", "Contact Number": "9841234567" },
+        { "Full Name": "Sita Kumari Sharma", "Gmail": "sita.sharma@gmail.com", "Contact Number": "9847654321" },
+        { "Full Name": "Gopal Prasad Timilsina", "Gmail": "gopal.timilsina@gmail.com", "Contact Number": "9860112233" }
+    ];
+    const ws = XLSX.utils.json_to_sheet(templateData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Teachers");
+    XLSX.writeFile(wb, "Teachers_Import_Template.xlsx");
+    showToast("Sample Excel Template downloaded!", "info");
+}
+
 function handleTeacherExcelUpload(event) {
     const file = event.target.files[0];
     if (!file) return;
@@ -461,38 +489,70 @@ function handleTeacherExcelUpload(event) {
             const jsonData = XLSX.utils.sheet_to_json(worksheet);
 
             let added = 0;
+            let skippedNoEmail = 0;
+            let skippedDuplicate = 0;
             
             jsonData.forEach((row) => {
-                const fullName = row['Full Name'] || row['FullName'] || row['name'] || row['Name'];
-                const contact = row['Contact Number'] || row['Contact'] || row['contact number'] || row['Phone'];
+                const fullName = (row['Full Name'] || row['FullName'] || row['name'] || row['Name'] || '').toString().trim();
+                const email = (row['Gmail'] || row['Email'] || row['E-mail'] || row['Google Email'] || row['email'] || row['gmail'] || row['Mail'] || '').toString().trim().toLowerCase();
+                const contact = (row['Contact Number'] || row['Contact'] || row['contact number'] || row['Phone'] || '').toString().trim();
                 
-                if (fullName) {
-                    let creds = generateTeacherCredentials(fullName, contact);
-                    let username = creds.username;
-                    let password = creds.password;
+                if (!fullName) return;
 
-                    let counter = 1;
-                    let baseUser = username;
-                    while(state.teachers.find(t => t.username === username)) {
-                        username = baseUser + counter;
-                        counter++;
-                    }
-
-                    state.teachers.push({
-                        id: 'T' + Date.now() + Math.floor(Math.random() * 1000),
-                        username: username,
-                        password: password,
-                        fullName: fullName,
-                        contact: contact || '-',
-                        assignments: []
-                    });
-                    added++;
+                // Compulsory Gmail validation
+                if (!email || !email.includes('@') || !email.includes('.')) {
+                    skippedNoEmail++;
+                    return;
                 }
+
+                // Check if email already registered in existing teachers or in this batch
+                if (state.teachers.some(t => (t.email || '').trim().toLowerCase() === email)) {
+                    skippedDuplicate++;
+                    return;
+                }
+
+                let creds = generateTeacherCredentials(fullName, contact);
+                let username = creds.username;
+                let password = creds.password;
+
+                let counter = 1;
+                let baseUser = username;
+                while(state.teachers.find(t => t.username === username)) {
+                    username = baseUser + counter;
+                    counter++;
+                }
+
+                state.teachers.push({
+                    id: 'T' + Date.now() + Math.floor(Math.random() * 1000),
+                    username: username,
+                    password: password,
+                    fullName: fullName,
+                    email: email,
+                    contact: contact || '-',
+                    assignments: [],
+                    classTeacherOf: []
+                });
+                added++;
             });
 
-            showToast(`Successfully uploaded ${added} teachers!`, "success");
+            if (added > 0) {
+                saveState(true, 'teachers');
+            }
+
+            if (added > 0 && skippedNoEmail === 0 && skippedDuplicate === 0) {
+                showToast(`Successfully uploaded ${added} teachers with Gmail!`, "success");
+            } else if (added > 0) {
+                let details = [];
+                if (skippedNoEmail > 0) details.push(`${skippedNoEmail} skipped (missing/invalid Gmail)`);
+                if (skippedDuplicate > 0) details.push(`${skippedDuplicate} skipped (duplicate Gmail)`);
+                showToast(`Uploaded ${added} teachers. (${details.join(', ')})`, "warning");
+            } else {
+                showToast(`Upload failed: Gmail is compulsory for all teachers! Please make sure 'Gmail' or 'Email' column contains valid emails.`, "error");
+            }
+
             renderManageTeachers(document.getElementById('content-area'));
         } catch(error) {
+            console.error("Teacher Excel error:", error);
             showToast("Error parsing Excel file.", "error");
         }
     };
@@ -503,18 +563,19 @@ function toggleNewTeacherFields() {
     const selectVal = document.getElementById('t-select').value;
     const fields = document.getElementById('new-teacher-fields');
     const nameIn = document.getElementById('t-fullname');
+    const emailIn = document.getElementById('t-email');
     const contactIn = document.getElementById('t-contact');
     const btn = document.getElementById('submit-teacher-btn');
 
     if(selectVal === 'NEW') {
         fields.classList.remove('hidden');
         if(nameIn) nameIn.setAttribute('required', 'true');
-        if(contactIn) contactIn.setAttribute('required', 'true');
+        if(emailIn) emailIn.setAttribute('required', 'true');
         btn.innerText = "Create & Assign";
     } else {
         fields.classList.add('hidden');
         if(nameIn) nameIn.removeAttribute('required');
-        if(contactIn) contactIn.removeAttribute('required');
+        if(emailIn) emailIn.removeAttribute('required');
         btn.innerText = "Add Assignment Only";
     }
 }
@@ -554,9 +615,25 @@ function handleCreateTeacher(e) {
     }
 
     if(selectId === 'NEW') {
-        const fullName = document.getElementById('t-fullname').value.trim();
-        const contact = document.getElementById('t-contact').value.trim();
+        const fullName = (document.getElementById('t-fullname').value || '').trim();
+        const email = (document.getElementById('t-email').value || '').trim().toLowerCase();
+        const contact = (document.getElementById('t-contact').value || '').trim();
         
+        if (!fullName) {
+            showToast("Teacher Full Name is required", "error");
+            return;
+        }
+
+        if (!email || !email.includes('@') || !email.includes('.')) {
+            showToast("Valid Gmail/Email is compulsory for creating a teacher!", "error");
+            return;
+        }
+
+        if (state.teachers.some(t => (t.email || '').trim().toLowerCase() === email)) {
+            showToast(`Teacher with Gmail ${email} already exists!`, "error");
+            return;
+        }
+
         let creds = generateTeacherCredentials(fullName, contact);
         let username = creds.username;
         let password = creds.password;
@@ -566,11 +643,14 @@ function handleCreateTeacher(e) {
 
         state.teachers.push({
             id: 'T' + Date.now(),
-            username, password, fullName, contact: contact || '-', 
+            username, password, fullName,
+            email,
+            contact: contact || '-', 
             assignments: subject ? [{className, subject}] : [],
             classTeacherOf: isClassTeacher ? [className] : []
         });
-        showToast(`Created teacher ${fullName}`, 'success');
+        saveState(true, 'teachers');
+        showToast(`Created teacher ${fullName} (${email})`, 'success');
         renderManageTeachers(document.getElementById('content-area')); 
         
     } else {
@@ -591,6 +671,8 @@ function handleCreateTeacher(e) {
                 actions.push(`Class Teacher`);
             }
             
+            saveState(true, 'teachers');
+
             if(actions.length > 0) {
                 showToast(`Assigned ${actions.join(' & ')} to ${teacher.fullName}`, 'success');
             } else {
@@ -636,16 +718,35 @@ function updateTeacherList() {
             div.innerHTML = `
                 <div class="flex-1 w-full">
                     <div class="flex flex-col gap-2 w-full">
-                        <input type="text" id="edit-t-name-${t.id}" value="${t.fullName || ''}" class="px-3 py-2 border rounded text-sm w-full focus:ring-1 focus:ring-blue-500 outline-none" placeholder="Full Name">
+                        <div>
+                            <label class="block text-xs font-semibold text-gray-700 mb-0.5">Full Name *</label>
+                            <input type="text" id="edit-t-name-${t.id}" value="${t.fullName || ''}" class="px-3 py-1.5 border rounded text-sm w-full focus:ring-1 focus:ring-blue-500 outline-none" placeholder="Full Name" required>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-gray-700 mb-0.5">
+                                <i class="fab fa-google text-red-500 mr-1"></i>Gmail / Email (Compulsory) *
+                            </label>
+                            <input type="email" id="edit-t-email-${t.id}" value="${t.email || ''}" class="px-3 py-1.5 border rounded text-sm w-full focus:ring-1 focus:ring-blue-500 outline-none" placeholder="teacher@gmail.com" required>
+                        </div>
                         <div class="flex gap-2">
-                            <input type="text" id="edit-t-user-${t.id}" value="${t.username}" class="px-3 py-2 border rounded text-sm w-1/2 focus:ring-1 focus:ring-blue-500 outline-none" placeholder="Username">
-                            <input type="text" id="edit-t-pass-${t.id}" value="${t.password}" class="px-3 py-2 border rounded text-sm w-1/2 focus:ring-1 focus:ring-blue-500 outline-none" placeholder="Password">
+                            <div class="w-1/2">
+                                <label class="block text-xs font-semibold text-gray-700 mb-0.5">Username *</label>
+                                <input type="text" id="edit-t-user-${t.id}" value="${t.username}" class="px-3 py-1.5 border rounded text-sm w-full focus:ring-1 focus:ring-blue-500 outline-none" placeholder="Username" required>
+                            </div>
+                            <div class="w-1/2">
+                                <label class="block text-xs font-semibold text-gray-700 mb-0.5">Password *</label>
+                                <input type="text" id="edit-t-pass-${t.id}" value="${t.password}" class="px-3 py-1.5 border rounded text-sm w-full focus:ring-1 focus:ring-blue-500 outline-none" placeholder="Password" required>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-gray-700 mb-0.5">Contact Number</label>
+                            <input type="tel" id="edit-t-contact-${t.id}" value="${t.contact && t.contact !== '-' ? t.contact : ''}" class="px-3 py-1.5 border rounded text-sm w-full focus:ring-1 focus:ring-blue-500 outline-none" placeholder="Contact Number">
                         </div>
                     </div>
                 </div>
                 <div class="flex sm:flex-col gap-2 mt-2 sm:mt-0 justify-end">
-                    <button onclick="saveEditTeacher('${t.id}')" class="bg-green-100 text-green-700 hover:bg-green-200 px-3 py-2 rounded-md text-sm font-medium flex-1 sm:flex-none text-center"><i class="fas fa-save mr-1"></i> Save</button>
-                    <button onclick="cancelEditTeacher()" class="bg-gray-100 text-gray-700 hover:bg-gray-200 px-3 py-2 rounded-md text-sm font-medium flex-1 sm:flex-none text-center"><i class="fas fa-times"></i> Cancel</button>
+                    <button onclick="saveEditTeacher('${t.id}')" class="bg-green-100 text-green-700 hover:bg-green-200 px-3 py-2 rounded-md text-sm font-medium flex-1 sm:flex-none text-center cursor-pointer"><i class="fas fa-save mr-1"></i> Save</button>
+                    <button onclick="cancelEditTeacher()" class="bg-gray-100 text-gray-700 hover:bg-gray-200 px-3 py-2 rounded-md text-sm font-medium flex-1 sm:flex-none text-center cursor-pointer"><i class="fas fa-times"></i> Cancel</button>
                 </div>
             `;
         } else if (confirmDeleteTeacherId === t.id) {
@@ -653,8 +754,8 @@ function updateTeacherList() {
                 <div class="text-red-600 flex flex-col justify-center gap-2 font-medium w-full">
                     <div><i class="fas fa-exclamation-triangle mr-1"></i> Delete ${t.fullName || t.username}?</div>
                     <div class="flex gap-2 w-full">
-                        <button onclick="executeDeleteTeacher('${t.id}')" class="bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded-md text-sm font-medium flex-1 text-center">Yes</button>
-                        <button onclick="cancelDeleteTeacher()" class="bg-gray-200 hover:bg-gray-300 text-gray-800 px-3 py-2 rounded-md text-sm font-medium flex-1 text-center">Cancel</button>
+                        <button onclick="executeDeleteTeacher('${t.id}')" class="bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded-md text-sm font-medium flex-1 text-center cursor-pointer">Yes</button>
+                        <button onclick="cancelDeleteTeacher()" class="bg-gray-200 hover:bg-gray-300 text-gray-800 px-3 py-2 rounded-md text-sm font-medium flex-1 text-center cursor-pointer">Cancel</button>
                     </div>
                 </div>
             `;
@@ -662,16 +763,19 @@ function updateTeacherList() {
             div.innerHTML = `
                 <div class="w-full sm:w-1/3 flex flex-col">
                     <div class="flex items-start gap-3 mb-2">
-                        <div class="w-10 h-10 rounded-full bg-gray-100 border flex items-center justify-center text-gray-500 text-lg shrink-0 mt-1"><i class="fas fa-user-tie"></i></div>
-                        <div class="min-w-0">
+                        <div class="w-10 h-10 rounded-full bg-blue-50 border border-blue-200 flex items-center justify-center text-blue-600 text-lg shrink-0 mt-1"><i class="fas fa-user-tie"></i></div>
+                        <div class="min-w-0 flex-1">
                             <h4 class="font-bold text-gray-800 text-sm leading-tight truncate" title="${t.fullName || t.username}">${t.fullName || t.username}</h4>
                             <p class="text-xs text-blue-600 font-semibold truncate mt-1">@${t.username} | ${t.password}</p>
+                            <p class="text-xs ${t.email ? 'text-purple-700 font-medium' : 'text-amber-700 font-semibold bg-amber-50 px-1.5 py-0.5 rounded inline-block border border-amber-200'} truncate mt-1" title="${t.email || 'Gmail Not Set'}">
+                                <i class="fab fa-google text-red-500 mr-1"></i>${t.email ? t.email : 'Gmail missing (Click Edit)'}
+                            </p>
                             <p class="text-xs text-gray-500 mt-0.5 truncate"><i class="fas fa-phone mr-1"></i>${t.contact || '-'}</p>
                         </div>
                     </div>
                     <div class="flex gap-3 mt-1 pl-12 sm:pl-14">
-                        <button onclick="startEditTeacher('${t.id}')" class="text-xs font-medium text-blue-600 hover:text-blue-800 p-1"><i class="fas fa-edit mr-1"></i>Edit</button>
-                        <button onclick="startDeleteTeacher('${t.id}')" class="text-xs font-medium text-red-500 hover:text-red-700 p-1"><i class="fas fa-trash mr-1"></i>Delete</button>
+                        <button onclick="startEditTeacher('${t.id}')" class="text-xs font-medium text-blue-600 hover:text-blue-800 p-1 cursor-pointer"><i class="fas fa-edit mr-1"></i>Edit</button>
+                        <button onclick="startDeleteTeacher('${t.id}')" class="text-xs font-medium text-red-500 hover:text-red-700 p-1 cursor-pointer"><i class="fas fa-trash mr-1"></i>Delete</button>
                     </div>
                 </div>
                 <div class="flex-1 w-full sm:w-2/3 border-t sm:border-t-0 sm:border-l border-gray-100 pt-3 sm:pt-0 sm:pl-4 mt-2 sm:mt-0">
@@ -692,17 +796,35 @@ function updateTeacherList() {
 function startEditTeacher(id) { editingTeacherId = id; confirmDeleteTeacherId = null; updateTeacherList(); }
 function cancelEditTeacher() { editingTeacherId = null; updateTeacherList(); }
 function saveEditTeacher(id) {
-    const user = document.getElementById(`edit-t-user-${id}`).value.trim();
-    const pass = document.getElementById(`edit-t-pass-${id}`).value.trim();
-    const name = document.getElementById(`edit-t-name-${id}`).value.trim();
-    if(!user || !pass) { showToast("Required", "error"); return; }
-    
+    const user = (document.getElementById(`edit-t-user-${id}`).value || '').trim();
+    const pass = (document.getElementById(`edit-t-pass-${id}`).value || '').trim();
+    const name = (document.getElementById(`edit-t-name-${id}`).value || '').trim();
+    const email = (document.getElementById(`edit-t-email-${id}`).value || '').trim().toLowerCase();
+    const contactEl = document.getElementById(`edit-t-contact-${id}`);
+    const contact = contactEl ? contactEl.value.trim() : '';
+
+    if(!user || !pass || !name) { showToast("Name, username and password are required", "error"); return; }
+    if(!email || !email.includes('@') || !email.includes('.')) {
+        showToast("Valid Gmail/Email is compulsory!", "error");
+        return;
+    }
+    const emailDuplicate = state.teachers.some(t => t.id !== id && (t.email || '').trim().toLowerCase() === email);
+    if (emailDuplicate) {
+        showToast(`Gmail ${email} is already registered to another teacher!`, "error");
+        return;
+    }
+
     const teacher = state.teachers.find(t => t.id === id);
     if(teacher) {
-        teacher.username = user; teacher.password = pass; teacher.fullName = name;
+        teacher.username = user;
+        teacher.password = pass;
+        teacher.fullName = name;
+        teacher.email = email;
+        if (contact) teacher.contact = contact;
         editingTeacherId = null;
+        saveState(true, 'teachers');
         updateTeacherList();
-        showToast("Updated", "success");
+        showToast(`Updated ${name} and synced to Cloud!`, "success");
     }
 }
 function startDeleteTeacher(id) { confirmDeleteTeacherId = id; editingTeacherId = null; updateTeacherList(); }
@@ -710,18 +832,24 @@ function cancelDeleteTeacher() { confirmDeleteTeacherId = null; updateTeacherLis
 function executeDeleteTeacher(id) {
     state.teachers = state.teachers.filter(t => t.id !== id);
     confirmDeleteTeacherId = null;
+    saveState(true, 'teachers');
     updateTeacherList();
-    showToast("Deleted", "info");
+    showToast("Deleted teacher and synced to Cloud", "info");
 }
 function removeAssignment(tId, aIdx) {
     const t = state.teachers.find(x => x.id === tId);
-    if(t) { t.assignments.splice(aIdx, 1); updateTeacherList(); }
+    if(t) {
+        t.assignments.splice(aIdx, 1);
+        saveState(true, 'teachers');
+        updateTeacherList();
+    }
 }
 
 function removeClassTeacher(tId, className) {
     const t = state.teachers.find(x => x.id === tId);
     if(t && t.classTeacherOf) {
         t.classTeacherOf = t.classTeacherOf.filter(c => c !== className);
+        saveState(true, 'teachers');
         updateTeacherList();
         showToast("Removed from Class Teacher role", "info");
     }
