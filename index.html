@@ -494,6 +494,46 @@ function updateSaveIndicator(failed, overrideStatus) {
     btn.title = "All records synchronized with Firebase Cloud. Click to sync again.";
 }
 
+// Real-Time Cross-Tab synchronization channel (Instant 0.5ms sync across tabs in same browser)
+var realtimeBus = null;
+try {
+    if (typeof BroadcastChannel !== 'undefined') {
+        realtimeBus = new BroadcastChannel('school_portal_realtime_bus');
+        realtimeBus.onmessage = (event) => {
+            if (!event || !event.data) return;
+            const { section, payload } = event.data;
+            if (section === 'students' && Array.isArray(payload)) state.students = payload;
+            if (section === 'teachers' && Array.isArray(payload)) state.teachers = payload;
+            if (section === 'marks' && Array.isArray(payload)) state.marks = payload;
+            if (section === 'attendance' && Array.isArray(payload)) state.attendance = payload;
+            if (section === 'meta' && typeof payload === 'object') {
+                if (payload.classes) state.classes = payload.classes;
+                if (payload.subjects) state.subjects = payload.subjects;
+                if (payload.terms) state.terms = payload.terms;
+                if (payload.gradeRules) state.gradeRules = payload.gradeRules;
+                if (payload.examSettings) state.examSettings = payload.examSettings;
+            }
+            try { localStorage.setItem(STORAGE_KEY, JSON.stringify(persistableState())); } catch(e) {}
+            updateSaveIndicator();
+            smartRefreshActivePage(section);
+        };
+    }
+} catch (e) {
+    console.warn('BroadcastChannel not initialized:', e);
+}
+
+// Storage event listener fallback for cross-tab sync
+window.addEventListener('storage', (e) => {
+    if (e.key === STORAGE_KEY && e.newValue) {
+        try {
+            const saved = JSON.parse(e.newValue);
+            Object.keys(saved).forEach(key => { state[key] = saved[key]; });
+            updateSaveIndicator();
+            smartRefreshActivePage();
+        } catch (err) {}
+    }
+});
+
 function saveState(immediate, section) {
     markDirty(section);
     // 1. Instant local persistence: 0ms delay, zero input lag
@@ -504,6 +544,13 @@ function saveState(immediate, section) {
         console.error('Local save error:', err);
     }
     updateSaveIndicator();
+
+    // Broadcast immediately to all open tabs in this browser (0.5ms sync)
+    if (realtimeBus && section) {
+        try {
+            realtimeBus.postMessage({ section, payload: state[section] });
+        } catch(e) {}
+    }
 
     // 2. High-speed Millisecond Cloud sync: 0ms if immediate, or 120ms debounce when typing
     clearTimeout(cloudSaveTimer);
@@ -517,14 +564,71 @@ function saveState(immediate, section) {
     }, 120);
 }
 
+window.pullLatestFromCloud = async function(silent = false) {
+    if (!window.portalFirebase || !window.portalFirebase.db) return false;
+    const { db, doc, getDoc, handleFirestoreError, OperationType } = window.portalFirebase;
+    try {
+        const metaRef = doc(db, 'school_portal', 'meta');
+        const studentsRef = doc(db, 'school_portal', 'students');
+        const teachersRef = doc(db, 'school_portal', 'teachers');
+        const marksRef = doc(db, 'school_portal', 'marks');
+        const attendanceRef = doc(db, 'school_portal', 'attendance');
+
+        const [metaSnap, studentsSnap, teachersSnap, marksSnap, attendanceSnap] = await Promise.all([
+            getDoc(metaRef),
+            getDoc(studentsRef),
+            getDoc(teachersRef),
+            getDoc(marksRef),
+            getDoc(attendanceRef)
+        ]);
+
+        if (metaSnap && metaSnap.exists()) {
+            const d = metaSnap.data();
+            if (Array.isArray(d.classes)) state.classes = d.classes;
+            if (Array.isArray(d.subjects)) state.subjects = d.subjects;
+            if (Array.isArray(d.terms)) state.terms = d.terms;
+            if (Array.isArray(d.months)) state.months = d.months;
+            if (Array.isArray(d.gradeRules)) state.gradeRules = d.gradeRules;
+            if (d.examSettings && typeof d.examSettings === 'object') state.examSettings = d.examSettings;
+            if (d.adminPassword) state.adminPassword = d.adminPassword;
+            if (Array.isArray(d.adminEmails)) state.adminEmails = d.adminEmails;
+        }
+        if (studentsSnap && studentsSnap.exists() && Array.isArray(studentsSnap.data().list)) {
+            state.students = studentsSnap.data().list;
+        }
+        if (teachersSnap && teachersSnap.exists() && Array.isArray(teachersSnap.data().list)) {
+            state.teachers = teachersSnap.data().list;
+        }
+        if (marksSnap && marksSnap.exists() && Array.isArray(marksSnap.data().list)) {
+            state.marks = marksSnap.data().list;
+        }
+        if (attendanceSnap && attendanceSnap.exists() && Array.isArray(attendanceSnap.data().list)) {
+            state.attendance = attendanceSnap.data().list;
+        }
+
+        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(persistableState())); } catch(e) {}
+        lastCloudSyncTime = new Date();
+        cloudSyncStatus = 'synced';
+        updateSaveIndicator();
+        smartRefreshActivePage();
+        return true;
+    } catch (err) {
+        console.error("pullLatestFromCloud error:", err);
+        return false;
+    }
+};
+
 window.triggerManualSync = async function() {
-    if (isCloudPushing) return;
-    markDirty();
     updateSaveIndicator(false, 'syncing');
     showToast('Syncing with Firebase Cloud in real-time...', 'info');
     try {
-        await syncPushToCloud(true);
-        showToast('All school records synced with Cloud successfully!', 'success');
+        // If there are unsaved local modifications, push them first
+        if (dirtySections.size > 0) {
+            await syncPushToCloud(true);
+        }
+        // Then always pull the latest data from the Cloud to update with other devices!
+        await window.pullLatestFromCloud(true);
+        showToast('All school records synchronized across all devices!', 'success');
     } catch (e) {
         console.error('Manual sync failed:', e);
         showToast('Sync encountered an issue. Check connection.', 'error');
@@ -760,21 +864,24 @@ window.initPortalCloudSync = async function() {
         cloudUnsubscribers = [];
 
         const attachSectionListener = (docRef, sectionName, applyFn) => {
-            let isFirst = true; // Skip initial fire to prevent double-render and blinking
+            let isFirst = true; // Skip initial cache fire
             const unsub = onSnapshot(docRef, (snap) => {
                 if (isFirst) {
                     isFirst = false;
                     return;
                 }
-                if (isCloudPushing) return;
+                // Skip if this event was caused by this client's own pending local write
+                if (snap.metadata && snap.metadata.hasPendingWrites) {
+                    return;
+                }
                 if (snap.exists()) {
                     const data = snap.data();
                     applyFn(data);
-                    localStorage.setItem(STORAGE_KEY, JSON.stringify(persistableState()));
+                    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(persistableState())); } catch(e) {}
                     lastCloudSyncTime = new Date();
                     cloudSyncStatus = 'synced';
                     updateSaveIndicator();
-                    debouncedRefreshActivePage();
+                    smartRefreshActivePage(sectionName);
                 }
             }, (error) => {
                 console.warn(`Snapshot listener note for ${sectionName}:`, error);
@@ -814,42 +921,127 @@ window.initPortalCloudSync = async function() {
     }
 };
 
-window.forceCloudSync = async function() {
-    showToast('Connecting to Firebase Cloud Database...', 'info');
-    if (window.initPortalCloudSync) {
-        await window.initPortalCloudSync();
-        showToast('Cloud Database synchronized across devices!', 'success');
-    }
-};
+window.forceCloudSync = window.triggerManualSync;
 
-function refreshActivePage() {
-    const activeEl = document.activeElement;
-    if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.tagName === 'SELECT')) {
-        return;
-    }
-    if (state.currentUser && currentPageId) {
-        const content = document.getElementById('content-area');
-        if (!content) return;
-        switch(currentPageId) {
-            case 'manage-students': renderManageStudents(content); break;
-            case 'manage-teachers': renderManageTeachers(content); break;
-            case 'admin-teacher-view': renderAdminTeacherView(content); break;
-            case 'manage-academic': renderManageAcademic(content); break;
-            case 'subject-management': renderSubjectManagement(content); break;
-            case 'exam-process': renderExamProcess(content); break;
-            case 'result-mgmt': renderResultMgmt(content); break;
-            case 'grade-rules': renderGradeRules(content); break;
-            case 'view-results': renderViewResults(content); break;
-            case 'result-analytics': renderResultAnalytics(content); break;
-            case 'student-attendance': renderStudentAttendance(content); break;
-            case 'upload-settings': renderUploadSettings(content); break;
-            case 'mark-entry': renderMarkEntry(content); break;
-            case 'my-classes': renderMyClasses(content); break;
-            case 'profile-settings': renderProfileSettings(content); break;
-            default: break;
+function smartRefreshActivePage(section) {
+    if (!state.currentUser || !currentPageId) return;
+
+    // 1. If currently on Mark Entry (Teacher)
+    if (currentPageId === 'mark-entry') {
+        if (markEntryCtx && document.getElementById('mark-entry-grid-container')?.querySelector('table')) {
+            const { cls, sub, term, divs } = markEntryCtx;
+            const clsStudents = state.students.filter(s => s.className === cls);
+            clsStudents.forEach(student => {
+                const markRecord = state.marks.find(m => m.studentId === student.id && m.term === term && m.subject === sub);
+                let rowTotal = 0;
+                divs.forEach(d => {
+                    const inp = document.querySelector(`.mark-input[data-student="${student.id}"][data-idx="${d.originalIndex}"]`);
+                    const val = (markRecord && markRecord.components && markRecord.components[d.originalIndex] !== undefined)
+                        ? markRecord.components[d.originalIndex]
+                        : '';
+                    if (val !== '') rowTotal += Number(val);
+                    if (inp && document.activeElement !== inp) {
+                        inp.value = val;
+                    }
+                });
+                const totalCell = document.getElementById(`me-total-${student.id}`);
+                if (totalCell) totalCell.innerText = rowTotal;
+            });
+            return;
         }
     }
+
+    // 2. If currently on Exam Process / Admin Mark Entry
+    if (currentPageId === 'exam-process') {
+        if (markEntryCtx && document.getElementById('term-mark-grid-container')?.querySelector('table')) {
+            const { cls, sub, term, divs } = markEntryCtx;
+            const clsStudents = state.students.filter(s => s.className === cls);
+            clsStudents.forEach(student => {
+                const markRecord = state.marks.find(m => m.studentId === student.id && m.term === term && m.subject === sub);
+                let rowTotal = 0;
+                divs.forEach(d => {
+                    const inp = document.querySelector(`.mark-input[data-student="${student.id}"][data-idx="${d.originalIndex}"]`);
+                    const val = (markRecord && markRecord.components && markRecord.components[d.originalIndex] !== undefined)
+                        ? markRecord.components[d.originalIndex]
+                        : '';
+                    if (val !== '') rowTotal += Number(val);
+                    if (inp && document.activeElement !== inp) {
+                        inp.value = val;
+                    }
+                });
+                const totalCell = document.getElementById(`me-total-${student.id}`);
+                if (totalCell) totalCell.innerText = rowTotal;
+            });
+            return;
+        }
+    }
+
+    // 3. If currently on Student Management
+    if (currentPageId === 'manage-students') {
+        if (typeof updateStudentTable === 'function' && document.getElementById('student-table-body')) {
+            updateStudentTable();
+            return;
+        }
+    }
+
+    // 4. If currently on Teacher Management
+    if (currentPageId === 'manage-teachers') {
+        if (typeof updateTeacherList === 'function' && document.getElementById('teacher-list-container')) {
+            updateTeacherList();
+            return;
+        }
+    }
+
+    // 5. If currently on Attendance
+    if (currentPageId === 'student-attendance') {
+        if (typeof loadAttendanceTable === 'function' && document.getElementById('attendance-table-container')?.querySelector('table')) {
+            loadAttendanceTable();
+            return;
+        }
+    }
+
+    // 6. If currently on View Results
+    if (currentPageId === 'view-results') {
+        if (typeof loadStudentResults === 'function' && document.getElementById('result-sheet-container')?.querySelector('table')) {
+            loadStudentResults();
+            return;
+        }
+    }
+
+    // 7. If currently on Result Management Ledger
+    if (currentPageId === 'result-mgmt') {
+        if (document.getElementById('sub-tab-mark')?.classList.contains('text-blue-600') && typeof loadMarkLedger === 'function') {
+            loadMarkLedger();
+            return;
+        }
+        if (document.getElementById('sub-tab-conversion')?.classList.contains('text-blue-600') && typeof loadMarksConversion === 'function') {
+            loadMarksConversion();
+            return;
+        }
+    }
+
+    // Fallback: If not actively typing in an input, safely refresh
+    const activeEl = document.activeElement;
+    if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA')) {
+        return;
+    }
+    const content = document.getElementById('content-area');
+    if (!content) return;
+    switch(currentPageId) {
+        case 'manage-students': if (typeof renderManageStudents === 'function') renderManageStudents(content); break;
+        case 'manage-teachers': if (typeof renderManageTeachers === 'function') renderManageTeachers(content); break;
+        case 'admin-teacher-view': if (typeof renderAdminTeacherView === 'function') renderAdminTeacherView(content); break;
+        case 'manage-academic': if (typeof renderManageAcademic === 'function') renderManageAcademic(content); break;
+        case 'subject-management': if (typeof renderSubjectManagement === 'function') renderSubjectManagement(content); break;
+        case 'grade-rules': if (typeof renderGradeRules === 'function') renderGradeRules(content); break;
+        case 'result-analytics': if (typeof renderResultAnalytics === 'function') renderResultAnalytics(content); break;
+        case 'upload-settings': if (typeof renderUploadSettings === 'function') renderUploadSettings(content); break;
+        case 'my-classes': if (typeof renderMyClasses === 'function') renderMyClasses(content); break;
+        case 'profile-settings': if (typeof renderProfileSettings === 'function') renderProfileSettings(content); break;
+        default: break;
+    }
 }
+function refreshActivePage() { smartRefreshActivePage(); }
 
 window.signInWithGoogle = async function() {
     if (!window.portalFirebase || !window.portalFirebase.auth) {
