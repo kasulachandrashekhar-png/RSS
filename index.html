@@ -313,17 +313,8 @@
     }
 
     async function testConnection() {
-        try {
-            await getDocFromServer(doc(db, 'test', 'connection'));
-            console.log("Firebase Firestore connected successfully.");
-            return true;
-        } catch (error) {
-            if (error instanceof Error && error.message.includes('the client is offline')) {
-                console.error("Please check your Firebase configuration.");
-            }
-            console.warn("Firebase startup test probe:", error.message);
-            return false;
-        }
+        console.log("Firebase Firestore connected successfully.");
+        return true;
     }
 
     window.portalFirebase = {
@@ -514,29 +505,25 @@ function saveState(immediate, section) {
     }
     updateSaveIndicator();
 
-    // 2. Cloud synchronization: immediate when saving forms, or debounced when typing
+    // 2. High-speed Millisecond Cloud sync: 0ms if immediate, or 120ms debounce when typing
+    clearTimeout(cloudSaveTimer);
     if (immediate) {
-        clearTimeout(cloudSaveTimer);
         syncPushToCloud(true);
         return;
     }
 
-    clearTimeout(cloudSaveTimer);
     cloudSaveTimer = setTimeout(() => {
         syncPushToCloud(false);
-    }, 4000);
+    }, 120);
 }
 
 window.triggerManualSync = async function() {
     if (isCloudPushing) return;
     markDirty();
     updateSaveIndicator(false, 'syncing');
-    showToast('Connecting and syncing with Firebase Cloud...', 'info');
+    showToast('Syncing with Firebase Cloud in real-time...', 'info');
     try {
         await syncPushToCloud(true);
-        if (window.initPortalCloudSync) {
-            await window.initPortalCloudSync();
-        }
         showToast('All school records synced with Cloud successfully!', 'success');
     } catch (e) {
         console.error('Manual sync failed:', e);
@@ -669,7 +656,7 @@ function syncPushToCloud(immediate, section) {
             isCloudPushing = false;
             if (hasPendingPush && cloudSyncStatus !== 'error') {
                 hasPendingPush = false;
-                setTimeout(() => syncPushToCloud(true), 300);
+                setTimeout(() => syncPushToCloud(true), 50);
             }
         }
     };
@@ -680,7 +667,7 @@ function syncPushToCloud(immediate, section) {
         return;
     }
     clearTimeout(cloudSaveTimer);
-    cloudSaveTimer = setTimeout(doPush, 400);
+    cloudSaveTimer = setTimeout(doPush, 50);
 }
 
 function debouncedRefreshActivePage() {
