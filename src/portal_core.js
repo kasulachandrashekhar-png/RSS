@@ -135,7 +135,7 @@ function saveState(immediate) {
     };
     if (immediate) { doSave(); return; }
     clearTimeout(saveTimer);
-    saveTimer = setTimeout(doSave, 600);
+    saveTimer = setTimeout(doSave, 120);
 }
 
 function syncPushToCloud(immediate) {
@@ -221,7 +221,7 @@ function syncPushToCloud(immediate) {
 
     if (immediate) { doPush(); return; }
     clearTimeout(cloudSaveTimer);
-    cloudSaveTimer = setTimeout(doPush, 1000);
+    cloudSaveTimer = setTimeout(doPush, 50);
 }
 
 window.initPortalCloudSync = async function() {
