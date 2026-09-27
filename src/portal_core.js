@@ -121,6 +121,32 @@ function updateSaveIndicator(failed, overrideStatus) {
     el.title = 'Data safely stored in Firebase Cloud Database. Click to refresh.';
 }
 
+var realtimeBus = null;
+try {
+    if (typeof BroadcastChannel !== 'undefined') {
+        realtimeBus = new BroadcastChannel('school_portal_realtime_bus');
+        realtimeBus.onmessage = (event) => {
+            if (!event || !event.data) return;
+            const { section, payload } = event.data;
+            if (section === 'students' && Array.isArray(payload)) state.students = payload;
+            if (section === 'teachers' && Array.isArray(payload)) state.teachers = payload;
+            if (section === 'marks' && Array.isArray(payload)) state.marks = payload;
+            if (section === 'attendance' && Array.isArray(payload)) state.attendance = payload;
+            if (section === 'meta' && typeof payload === 'object') {
+                if (payload.classes) state.classes = payload.classes;
+                if (payload.subjects) state.subjects = payload.subjects;
+                if (payload.terms) state.terms = payload.terms;
+                if (payload.gradeRules) state.gradeRules = payload.gradeRules;
+                if (payload.examSettings) state.examSettings = payload.examSettings;
+            }
+            try { localStorage.setItem(STORAGE_KEY, JSON.stringify(persistableState())); } catch(e) {}
+            updateSaveIndicator();
+            if (typeof smartRefreshActivePage === 'function') smartRefreshActivePage(section);
+            else refreshActivePage();
+        };
+    }
+} catch (e) {}
+
 function saveState(immediate) {
     const doSave = () => {
         try {
