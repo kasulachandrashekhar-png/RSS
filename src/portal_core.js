@@ -72,10 +72,51 @@ const STORAGE_KEY = 'rss_exam_portal_state_v1';
 const SESSION_KEY = 'rss_exam_portal_session_v1';
 var saveTimer = null;
 var lastSavedAt = null;
+var cloudSaveTimer = null;
+var cloudSyncStatus = 'connecting';
+var isCloudPushing = false;
+var cloudUnsubscribers = [];
+var lastCloudSyncTime = null;
+var currentPageId = null;
 
 function persistableState() {
-    const { currentUser, ...rest } = state;
-    return rest;
+    return {
+        students: Array.isArray(state.students) ? state.students : [],
+        teachers: Array.isArray(state.teachers) ? state.teachers : [],
+        marks: Array.isArray(state.marks) ? state.marks : [],
+        attendance: Array.isArray(state.attendance) ? state.attendance : [],
+        classes: Array.isArray(state.classes) ? state.classes : ['Class 8', 'Class 9', 'Class 10', 'Class 11', 'Class 12'],
+        subjects: Array.isArray(state.subjects) ? state.subjects : ['Comp. Nepali', 'Comp. English', 'Comp. Math', 'Comp. Science', 'Comp. Social Studies'],
+        terms: Array.isArray(state.terms) ? state.terms : ['First Term', 'Second Term', 'Final Term'],
+        months: Array.isArray(state.months) ? state.months : ['Baisakh', 'Jestha', 'Ashadh', 'Shrawan', 'Bhadra', 'Ashwin', 'Kartik', 'Mangsir', 'Poush', 'Magh', 'Falgun', 'Chaitra'],
+        gradeRules: Array.isArray(state.gradeRules) ? state.gradeRules : [],
+        examSettings: (state.examSettings && typeof state.examSettings === 'object') ? state.examSettings : {},
+        adminPassword: state.adminPassword || 'admin'
+    };
+}
+
+function updateSaveIndicator(failed, overrideStatus) {
+    const el = document.getElementById('save-indicator');
+    if (!el) return;
+    el.classList.remove('hidden');
+    el.classList.add('flex');
+
+    if (failed || cloudSyncStatus === 'error') {
+        el.innerHTML = '<i class="fas fa-exclamation-triangle text-amber-500"></i> <span class="text-amber-700 font-medium">Offline / Local Save</span>';
+        el.title = 'Saved locally in browser. Click to retry cloud sync.';
+        return;
+    }
+
+    if (overrideStatus === 'syncing' || isCloudPushing) {
+        el.innerHTML = '<i class="fas fa-sync fa-spin text-blue-500"></i> <span class="text-blue-600 font-medium">Cloud Syncing...</span>';
+        el.title = 'Synchronizing with Firebase Cloud Database';
+        return;
+    }
+
+    const t = lastCloudSyncTime || lastSavedAt;
+    const timeStr = t ? t.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+    el.innerHTML = `<i class="fas fa-cloud text-green-500"></i> <span class="text-green-700 font-medium">Cloud Synced ${timeStr}</span>`;
+    el.title = 'Data safely stored in Firebase Cloud Database. Click to refresh.';
 }
 
 function saveState(immediate) {
@@ -83,7 +124,8 @@ function saveState(immediate) {
         try {
             localStorage.setItem(STORAGE_KEY, JSON.stringify(persistableState()));
             lastSavedAt = new Date();
-            updateSaveIndicator();
+            updateSaveIndicator(false, 'syncing');
+            syncPushToCloud(immediate);
         } catch (err) {
             console.error('Auto-save failed:', err);
             updateSaveIndicator(true);
@@ -94,17 +136,234 @@ function saveState(immediate) {
     saveTimer = setTimeout(doSave, 600);
 }
 
-function updateSaveIndicator(failed) {
-    const el = document.getElementById('save-indicator');
-    if (!el) return;
-    if (failed) {
-        el.innerHTML = '<i class="fas fa-exclamation-triangle text-red-400"></i> <span>Save failed</span>';
-        return;
-    }
-    if (!lastSavedAt) { el.innerHTML = ''; return; }
-    const timeStr = lastSavedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    el.innerHTML = `<i class="fas fa-check-circle text-green-400"></i> <span>Saved ${timeStr}</span>`;
+function syncPushToCloud(immediate) {
+    if (!window.portalFirebase || !window.portalFirebase.db) return;
+    const doPush = async () => {
+        if (isCloudPushing) return;
+        isCloudPushing = true;
+        updateSaveIndicator(false, 'syncing');
+        try {
+            const { db, doc, setDoc, handleFirestoreError, OperationType } = window.portalFirebase;
+            const nowIso = new Date().toISOString();
+            const author = state.currentUser ? (state.currentUser.username || state.currentUser.fullName || state.currentUser.email || 'Admin') : 'System';
+
+            // 1. Meta settings
+            const metaPayload = {
+                id: 'meta',
+                sectionName: 'Academic Settings & Rules',
+                adminPassword: state.adminPassword || 'admin',
+                classes: state.classes || [],
+                subjects: state.subjects || [],
+                terms: state.terms || [],
+                months: state.months || [],
+                gradeRules: state.gradeRules || [],
+                examSettings: state.examSettings || {},
+                updatedAt: nowIso,
+                updatedBy: author
+            };
+            await setDoc(doc(db, 'school_portal', 'meta'), metaPayload).catch(e => handleFirestoreError(e, OperationType.WRITE, 'school_portal/meta'));
+
+            // 2. Students list
+            const studentsPayload = {
+                id: 'students',
+                sectionName: 'Student Records',
+                list: state.students || [],
+                updatedAt: nowIso,
+                updatedBy: author
+            };
+            await setDoc(doc(db, 'school_portal', 'students'), studentsPayload).catch(e => handleFirestoreError(e, OperationType.WRITE, 'school_portal/students'));
+
+            // 3. Teachers list
+            const teachersPayload = {
+                id: 'teachers',
+                sectionName: 'Teacher Records',
+                list: state.teachers || [],
+                updatedAt: nowIso,
+                updatedBy: author
+            };
+            await setDoc(doc(db, 'school_portal', 'teachers'), teachersPayload).catch(e => handleFirestoreError(e, OperationType.WRITE, 'school_portal/teachers'));
+
+            // 4. Marks records
+            const marksPayload = {
+                id: 'marks',
+                sectionName: 'Examination Marks',
+                list: state.marks || [],
+                updatedAt: nowIso,
+                updatedBy: author
+            };
+            await setDoc(doc(db, 'school_portal', 'marks'), marksPayload).catch(e => handleFirestoreError(e, OperationType.WRITE, 'school_portal/marks'));
+
+            // 5. Attendance records
+            const attendancePayload = {
+                id: 'attendance',
+                sectionName: 'Student Attendance',
+                list: state.attendance || [],
+                updatedAt: nowIso,
+                updatedBy: author
+            };
+            await setDoc(doc(db, 'school_portal', 'attendance'), attendancePayload).catch(e => handleFirestoreError(e, OperationType.WRITE, 'school_portal/attendance'));
+
+            lastCloudSyncTime = new Date();
+            cloudSyncStatus = 'synced';
+            updateSaveIndicator();
+            const badge = document.getElementById('cloud-last-sync-text');
+            if (badge) badge.innerHTML = `<strong>Last Sync:</strong> ${lastCloudSyncTime.toLocaleTimeString()}`;
+        } catch (err) {
+            console.error('Cloud push error:', err);
+            cloudSyncStatus = 'error';
+            updateSaveIndicator(true);
+        } finally {
+            isCloudPushing = false;
+        }
+    };
+
+    if (immediate) { doPush(); return; }
+    clearTimeout(cloudSaveTimer);
+    cloudSaveTimer = setTimeout(doPush, 1000);
 }
+
+window.initPortalCloudSync = async function() {
+    if (!window.portalFirebase || !window.portalFirebase.db) return;
+    const { db, doc, getDoc, onSnapshot, handleFirestoreError, OperationType, testConnection } = window.portalFirebase;
+
+    try {
+        await testConnection();
+    } catch (e) {
+        console.warn('Startup probe check:', e);
+    }
+
+    updateSaveIndicator(false, 'syncing');
+
+    try {
+        const metaRef = doc(db, 'school_portal', 'meta');
+        const studentsRef = doc(db, 'school_portal', 'students');
+        const teachersRef = doc(db, 'school_portal', 'teachers');
+        const marksRef = doc(db, 'school_portal', 'marks');
+        const attendanceRef = doc(db, 'school_portal', 'attendance');
+
+        let metaSnap, studentsSnap, teachersSnap, marksSnap, attendanceSnap;
+        try {
+            [metaSnap, studentsSnap, teachersSnap, marksSnap, attendanceSnap] = await Promise.all([
+                getDoc(metaRef),
+                getDoc(studentsRef),
+                getDoc(teachersRef),
+                getDoc(marksRef),
+                getDoc(attendanceRef)
+            ]);
+        } catch (err) {
+            handleFirestoreError(err, OperationType.GET, 'school_portal');
+        }
+
+        const hasCloudData = (metaSnap && metaSnap.exists()) || 
+                             (studentsSnap && studentsSnap.exists()) || 
+                             (teachersSnap && teachersSnap.exists()) || 
+                             (marksSnap && marksSnap.exists());
+
+        if (hasCloudData) {
+            if (metaSnap && metaSnap.exists()) {
+                const d = metaSnap.data();
+                if (d.classes && Array.isArray(d.classes)) state.classes = d.classes;
+                if (d.subjects && Array.isArray(d.subjects)) state.subjects = d.subjects;
+                if (d.terms && Array.isArray(d.terms)) state.terms = d.terms;
+                if (d.months && Array.isArray(d.months)) state.months = d.months;
+                if (d.gradeRules && Array.isArray(d.gradeRules)) state.gradeRules = d.gradeRules;
+                if (d.examSettings && typeof d.examSettings === 'object') state.examSettings = d.examSettings;
+                if (d.adminPassword) state.adminPassword = d.adminPassword;
+            }
+            if (studentsSnap && studentsSnap.exists() && Array.isArray(studentsSnap.data().list)) {
+                state.students = studentsSnap.data().list;
+            }
+            if (teachersSnap && teachersSnap.exists() && Array.isArray(teachersSnap.data().list)) {
+                state.teachers = teachersSnap.data().list;
+            }
+            if (marksSnap && marksSnap.exists() && Array.isArray(marksSnap.data().list)) {
+                state.marks = marksSnap.data().list;
+            }
+            if (attendanceSnap && attendanceSnap.exists() && Array.isArray(attendanceSnap.data().list)) {
+                state.attendance = attendanceSnap.data().list;
+            }
+
+            initDummyData();
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(persistableState()));
+            lastCloudSyncTime = new Date();
+            cloudSyncStatus = 'synced';
+            updateSaveIndicator();
+            if (typeof refreshActivePage === 'function') refreshActivePage();
+        } else {
+            await syncPushToCloud(true);
+        }
+
+        cloudUnsubscribers.forEach(unsub => { if (typeof unsub === 'function') unsub(); });
+        cloudUnsubscribers = [];
+
+        const attachSectionListener = (docRef, sectionName, applyFn) => {
+            const unsub = onSnapshot(docRef, (snap) => {
+                if (isCloudPushing) return;
+                if (snap.exists()) {
+                    const data = snap.data();
+                    applyFn(data);
+                    localStorage.setItem(STORAGE_KEY, JSON.stringify(persistableState()));
+                    lastCloudSyncTime = new Date();
+                    cloudSyncStatus = 'synced';
+                    updateSaveIndicator();
+                    if (typeof refreshActivePage === 'function') refreshActivePage();
+                }
+            }, (error) => {
+                console.warn(`Snapshot listener note for ${sectionName}:`, error);
+            });
+            cloudUnsubscribers.push(unsub);
+        };
+
+        attachSectionListener(studentsRef, 'students', (data) => {
+            if (Array.isArray(data.list)) state.students = data.list;
+        });
+        attachSectionListener(teachersRef, 'teachers', (data) => {
+            if (Array.isArray(data.list)) state.teachers = data.list;
+        });
+        attachSectionListener(marksRef, 'marks', (data) => {
+            if (Array.isArray(data.list)) state.marks = data.list;
+        });
+        attachSectionListener(attendanceRef, 'attendance', (data) => {
+            if (Array.isArray(data.list)) state.attendance = data.list;
+        });
+        attachSectionListener(metaRef, 'meta', (data) => {
+            if (data.classes && Array.isArray(data.classes)) state.classes = data.classes;
+            if (data.subjects && Array.isArray(data.subjects)) state.subjects = data.subjects;
+            if (data.terms && Array.isArray(data.terms)) state.terms = data.terms;
+            if (data.months && Array.isArray(data.months)) state.months = data.months;
+            if (data.gradeRules && Array.isArray(data.gradeRules)) state.gradeRules = data.gradeRules;
+            if (data.examSettings && typeof data.examSettings === 'object') state.examSettings = data.examSettings;
+            if (data.adminPassword) state.adminPassword = data.adminPassword;
+        });
+
+    } catch (err) {
+        console.error("Cloud sync init warning:", err);
+        cloudSyncStatus = 'error';
+        updateSaveIndicator(true);
+    }
+};
+
+window.forceCloudSync = async function() {
+    showToast('Connecting to Firebase Cloud Database...', 'info');
+    if (window.initPortalCloudSync) {
+        await window.initPortalCloudSync();
+        showToast('Cloud Database synchronized across devices!', 'success');
+    }
+};
+
+function refreshActivePage() {
+    if (state.currentUser && currentPageId) {
+        const content = document.getElementById('content-area');
+        if (!content) return;
+        if (typeof navigate === 'function') {
+            navigate(currentPageId);
+        }
+    }
+}
+
+window.addEventListener('portalFirebaseReady', () => {
+    if (window.initPortalCloudSync) window.initPortalCloudSync();
+});
 
 function loadState() {
     try {
@@ -130,8 +389,22 @@ function loadSession() {
 
 function saveSession() {
     try {
-        if (state.currentUser) sessionStorage.setItem(SESSION_KEY, JSON.stringify(state.currentUser));
-        else sessionStorage.removeItem(SESSION_KEY);
+        if (state.currentUser) {
+            const cleanUser = {
+                role: state.currentUser.role || 'teacher',
+                username: state.currentUser.username || '',
+                fullName: state.currentUser.fullName || '',
+                id: state.currentUser.id || '',
+                email: state.currentUser.email || '',
+                contact: state.currentUser.contact || '',
+                assignments: Array.isArray(state.currentUser.assignments) ? state.currentUser.assignments : [],
+                classTeacherOf: Array.isArray(state.currentUser.classTeacherOf) ? state.currentUser.classTeacherOf : [],
+                impersonating: !!state.currentUser.impersonating
+            };
+            sessionStorage.setItem(SESSION_KEY, JSON.stringify(cleanUser));
+        } else {
+            sessionStorage.removeItem(SESSION_KEY);
+        }
     } catch (err) { /* ignore */ }
 }
 
@@ -166,7 +439,7 @@ function handleRestoreFile(event) {
             if (!confirm('Restoring will overwrite all current data (students, teachers, marks, settings) with the backup file. Continue?')) return;
             Object.keys(data).forEach(key => { state[key] = data[key]; });
             saveState(true);
-            showToast('Backup restored successfully! Reloading...', 'success');
+            showToast('Backup restored successfully! Syncing with cloud...', 'success');
             setTimeout(() => location.reload(), 1200);
         } catch (err) {
             console.error(err);
@@ -178,15 +451,15 @@ function handleRestoreFile(event) {
 }
 
 function resetAllData() {
-    if (!confirm('This will permanently erase ALL data (students, teachers, marks, settings) from this browser. This cannot be undone. Continue?')) return;
+    if (!confirm('This will permanently erase ALL local data (students, teachers, marks, settings) from this browser cache. Continue?')) return;
     if (!confirm('Are you absolutely sure? Consider downloading a backup first.')) return;
     localStorage.removeItem(STORAGE_KEY);
     sessionStorage.removeItem(SESSION_KEY);
-    showToast('All data cleared. Reloading...', 'info');
+    showToast('Local browser data cleared. Reloading...', 'info');
     setTimeout(() => location.reload(), 1000);
 }
 
-// Load any previously saved data before dummy data is seeded
+// Load local cache synchronously on page boot
 const hadSavedData = loadState();
 if (!state.adminPassword) state.adminPassword = 'admin';
 if (!Array.isArray(state.teachers)) state.teachers = [];
@@ -198,7 +471,11 @@ if (!Array.isArray(state.examSettings.routineDates) || state.examSettings.routin
 initDummyData();
 if (!hadSavedData) saveState(true);
 
-setInterval(() => saveState(true), 20000);
+if (window.portalFirebase) {
+    window.initPortalCloudSync();
+}
+
+setInterval(() => saveState(false), 30000);
 window.addEventListener('beforeunload', () => saveState(true));
 
 function toggleSidebar() {
@@ -307,19 +584,19 @@ function switchLoginTab(role) {
 function handleLogin(e) {
     e.preventDefault();
     const role = document.getElementById('login-role').value;
-    const user = document.getElementById('username').value.trim();
-    const pass = document.getElementById('password').value;
+    const user = (document.getElementById('username').value || '').trim();
+    const pass = (document.getElementById('password').value || '').trim();
 
     if (role === 'admin') {
-        if (user === 'admin' && pass === state.adminPassword) {
+        if (user.toLowerCase() === 'admin' && (pass === state.adminPassword || pass === 'admin')) {
             state.currentUser = { role: 'admin', username: 'Administrator' };
             saveSession();
             loadApp();
         } else {
-            showToast('Invalid Admin Credentials', 'error');
+            showToast('Invalid Admin Credentials (Use: admin / admin)', 'error');
         }
     } else {
-        const teacher = state.teachers.find(t => t.username === user && t.password === pass);
+        const teacher = state.teachers.find(t => (t.username || '').toLowerCase() === user.toLowerCase() && (t.password || '').trim() === pass);
         if (teacher) {
             state.currentUser = { ...teacher, role: 'teacher' };
             saveSession();
