@@ -37,7 +37,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     
-    <style>
+          <style>
         body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; -webkit-tap-highlight-color: transparent; }
         .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 4px; }
@@ -49,32 +49,16 @@
         .fade-in { animation: fadeIn 0.3s ease-in-out; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
-        @page { size: A4; margin: 0; }
+        /* GRADE SHEET TABLE */
+        .gradesheet-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 14px; background: #ffffff; }
+        .gradesheet-table thead th { background: #ffffff !important; color: #000000 !important; font-weight: bold !important; border: 2px solid #1e3a8a !important; padding: 6px; text-align: center; }
+        .gradesheet-table tbody td { background: #ffffff; border: 2px solid #1e3a8a !important; padding: 6px; }
+        .gradesheet-table tfoot td { border: 2px solid #1e3a8a !important; padding: 8px; font-weight: bold; background: #f0f4ff; }
 
-        /* GRADESHEET TABLE — Bold Blue Borders + Bold Black Headings */
-        .gradesheet-table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 12px;
-            margin-bottom: 14px;
-        }
-        .gradesheet-table thead th {
-            background: #1e3a8a;
-            color: #000000 !important;
-            font-weight: bold !important;
-            border: 2px solid #1e3a8a;
-            padding: 6px;
-            text-align: center;
-        }
-        .gradesheet-table tbody td {
-            border: 2px solid #1e3a8a;
-            padding: 6px;
-        }
-        .gradesheet-table tfoot td {
-            border: 2px solid #1e3a8a;
-            padding: 8px;
-            font-weight: bold;
-        }
+        /* ============ A4 PRINT — AUTO FIT ============ */
+        @page { size: A4 portrait; margin: 0; }
+        @page admitLandscape { size: A4 landscape; margin: 0; }
+        @page admitPortrait { size: A4 portrait; margin: 0; }
 
         @media print {
             body { background: white !important; margin: 0 !important; padding: 0 !important; }
@@ -83,29 +67,172 @@
             #content-area { display: block !important; height: auto !important; overflow: visible !important; padding: 0 !important; background: white !important; }
             .print-section { width: 100% !important; box-shadow: none !important; border: none !important; padding: 0 !important; margin: 0 !important; }
 
+            /* ---------- GRADE SHEET ---------- */
             .gradesheet-a4 { width: 21cm !important; min-height: 29.7cm !important; padding: 1.5cm !important; margin: 0 auto !important; box-shadow: none !important; border: none !important; page-break-after: always !important; background: white !important; }
 
-            .admit-2-per-page { display: grid !important; grid-template-columns: 1fr 1fr !important; gap: 0.5cm !important; width: 29.7cm !important; height: 21cm !important; padding: 0.8cm !important; box-sizing: border-box !important; page-break-after: always !important; }
-            .admit-2-per-page .admit-card-print-box { width: 100% !important; height: 100% !important; box-sizing: border-box !important; page-break-inside: avoid !important; }
+            /* ---------- ADMIT CARD PRINT CONTAINER ---------- */
+            #admit-card-print-container { display: block !important; width: 100% !important; margin: 0 !important; padding: 0 !important; }
 
-            .admit-4-per-page { display: grid !important; grid-template-columns: 1fr 1fr !important; grid-template-rows: 1fr 1fr !important; gap: 0.4cm !important; width: 21cm !important; height: 29.7cm !important; padding: 0.6cm !important; box-sizing: border-box !important; page-break-after: always !important; }
-            .admit-4-per-page .admit-card-print-box { width: 100% !important; height: 100% !important; box-sizing: border-box !important; page-break-inside: avoid !important; }
-            .admit-4-per-page .admit-card-print-box h1 { font-size: 13px !important; }
-            .admit-4-per-page .admit-card-print-box p { font-size: 8px !important; }
-            .admit-4-per-page .admit-card-print-box h2 { font-size: 10px !important; }
-            .admit-4-per-page .admit-card-print-box table { font-size: 8px !important; }
-            .admit-4-per-page .admit-card-print-box td, .admit-4-per-page .admit-card-print-box th { padding: 2px 4px !important; }
-            .admit-4-per-page .admit-card-print-box img { max-width: 45px !important; max-height: 45px !important; }
+           /* ===================================================
+   ADMIT CARD — 2 PER PAGE (LANDSCAPE A4)
+   A4 landscape = 29.7cm x 21cm
+   =================================================== */
 
+.admit-page-2 {
+    page: admitLandscape;
+    page-break-after: always !important;
+
+    width: 29.7cm !important;
+    height: 21cm !important;
+
+    box-sizing: border-box !important;
+
+    /* Page positioning */
+    padding-top: 0.4cm !important;
+    padding-right: 0.6cm !important;
+    padding-bottom: 0.6cm !important;
+    padding-left: 0cm !important;
+
+    display: flex !important;
+    flex-direction: row !important;
+
+    gap: 0.6cm !important;
+
+    overflow: hidden !important;
+    background: white !important;
+}
+
+
+/* ===================================================
+   ADMIT CARD WIDTH & HEIGHT CONTROL
+   =================================================== */
+
+.admit-page-2 .admit-card-wrapper {
+
+    /* WIDTH */
+    width: 12.5cm !important;
+    min-width: 12.0cm !important;
+    max-width: 12.0cm !important;
+
+    /* HEIGHT */
+    height: 15.5cm !important;
+    min-height: 15.5cm !important;
+    max-height: 15.5cm !important;
+
+    box-sizing: border-box !important;
+    overflow: hidden !important;
+
+    border: 2px solid #1e3a8a !important;
+
+    padding: 12px !important;
+
+    display: flex !important;
+    flex-direction: column !important;
+
+    page-break-inside: avoid !important;
+
+    align-items: stretch !important;
+
+    /* Admit Card सामान्य text */
+    font-size: 16px !important;
+}
+
+
+/* ===================================================
+   EXAM ROUTINE TABLE FONT
+   =================================================== */
+
+.admit-page-2 .admit-card-wrapper table {
+    font-size: 16px !important;
+}
+
+.admit-page-2 .admit-card-wrapper table th {
+    font-size: 16px !important;
+}
+
+.admit-page-2 .admit-card-wrapper table td {
+    font-size: 16px !important;
+}
+
+
+/* ===================================================
+   CARD SCALE
+   =================================================== */
+
+.admit-page-2 .admit-card-scale {
+    transform: scale(0.85);
+    transform-origin: top left;
+
+    width: 115.6% !important;
+    height: 117.6% !important;
+}
+          /* ===================================================
+   ADMIT CARD — 4 PER PAGE (PORTRAIT A4)
+   A4 portrait = 21cm x 29.7cm
+   =================================================== */
+.admit-page-4 {
+    page: admitPortrait;
+    page-break-after: always !important;
+    width: 21cm !important;
+    height: 29.7cm !important;
+    box-sizing: border-box !important;
+    padding: 0.6cm !important;
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    grid-template-rows: 1fr 1fr !important;
+    gap: 0.5cm !important;
+    overflow: hidden !important;
+    background: white !important;
+}
+
+.admit-page-4 .admit-card-wrapper {
+    width: 95% !important;
+    height: 85% !important;
+    box-sizing: border-box !important;
+    overflow: hidden !important;
+    border: 2px solid #1e3a8a !important;
+    padding: 8px !important;
+    display: flex !important;
+    flex-direction: column !important;
+    page-break-inside: avoid !important;
+
+    /* Admit Card को सबै text को font size */
+    font-size: 15px !important;
+}
+
+/* Exam Routine table को font size */
+.admit-page-4 .admit-card-wrapper table {
+    font-size: 15px !important;
+}
+
+/* Table header */
+.admit-page-4 .admit-card-wrapper table th {
+    font-size: 15px !important;
+}
+
+/* Table भित्रको data */
+.admit-page-4 .admit-card-wrapper table td {
+    font-size: 15px !important;
+}
+
+/* Scale down 4-per-page cards to fit portrait grid */
+.admit-page-4 .admit-card-scale {
+    transform: scale(0.7);
+    transform-origin: top left;
+    width: 135.8% !important;
+    height: 135.8% !important;
+}
             .page-break { page-break-after: always !important; }
             .grade-sheet-container { background: white !important; padding: 0 !important; }
             #admit-card-container { display: none !important; }
             #admit-card-print-container { display: block !important; }
         }
-        
+
         #admit-card-container { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 20px; }
         .admit-card-screen { border: 2px solid #1e3a8a; padding: 18px; background: white; }
     </style>
+
+
 </head>
 <body class="text-gray-800 h-screen overflow-hidden flex flex-col">
 
@@ -288,10 +415,6 @@
         </main>
     </div>
 
-    <!-- Message 2 continues here -->
-
-
-
 
 <script type="module" src="/src/ResultAnalytics.tsx"></script>
 <script type="module">
@@ -368,8 +491,8 @@ var state = {
         ]}
     ],
     examSettings: {
-        routines: {}, routineDates: [''], routineTimes: {}, routineIncludedClasses: [], markDivisions: {}, images: {},
-        admitCardPerPage: '4',
+        routines: {}, routineDates: [''], routineTimes: {}, defaultRoutineTime: '11:00 AM - 2:00 PM',
+        routineIncludedClasses: [], markDivisions: {}, images: {}, admitCardPerPage: '4',
         schoolName: 'Shree Rasuwa Secondary School',
         schoolAddress: 'Gosaikunda RM-6, Dhunche, Rasuwa',
         estdYear: '2014 B.S.', academicYear: '2083'
@@ -774,6 +897,7 @@ if (!state.examSettings || typeof state.examSettings !== 'object') state.examSet
 if (!state.examSettings.routines || typeof state.examSettings.routines !== 'object') state.examSettings.routines = {};
 if (!Array.isArray(state.examSettings.routineDates) || state.examSettings.routineDates.length === 0) state.examSettings.routineDates = [''];
 if (!state.examSettings.routineTimes || typeof state.examSettings.routineTimes !== 'object') state.examSettings.routineTimes = {};
+if (!state.examSettings.defaultRoutineTime) state.examSettings.defaultRoutineTime = '11:00 AM - 2:00 PM';
 if (!state.examSettings.admitCardPerPage) state.examSettings.admitCardPerPage = '4';
 initDummyData();
 if (!hadSavedData) { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(persistableState())); } catch (e) {} }
@@ -1069,9 +1193,28 @@ function navigate(pageId) {
 
 
 // ============================================================
+// SIGNATURE BLOCK HELPER
+// ============================================================
+function buildSignatureBlock(imgs, size) {
+    const coSignImg = (imgs && imgs.coSign) ? `<img src="${imgs.coSign}" style="height:${size}px; object-fit:contain; margin-bottom:2px;">` : '';
+    const htSignImg = (imgs && imgs.htSign) ? `<img src="${imgs.htSign}" style="height:${size}px; object-fit:contain; margin-bottom:2px;">` : '';
+    return `<div style="display:flex; justify-content:space-between; margin-top:30px; padding:0 20px; font-size:12px;">
+        <div style="text-align:center;">
+            <div style="height:${size + 5}px; display:flex; align-items:flex-end; justify-content:center; margin-bottom:2px;">${coSignImg}</div>
+            <div style="border-top:1px solid #1e3a8a; padding-top:5px; width:180px; font-weight:bold;">Chandra Shekhar Kasula</div>
+            <div style="font-size:11px; color:#1e3a8a;">परीक्षा संयोजक</div>
+        </div>
+        <div style="text-align:center;">
+            <div style="height:${size + 5}px; display:flex; align-items:flex-end; justify-content:center; margin-bottom:2px;">${htSignImg}</div>
+            <div style="border-top:1px solid #1e3a8a; padding-top:5px; width:180px; font-weight:bold;">Tempa Risang Ghale</div>
+            <div style="font-size:11px; color:#1e3a8a;">प्रधानाध्यापक</div>
+        </div>
+    </div>`;
+}
+
+// ============================================================
 // PUBLIC STUDENT RESULT PORTAL
 // ============================================================
-
 function showPublicResultPortal() {
     document.getElementById('login-screen').classList.add('hidden');
     document.getElementById('public-result-portal').classList.remove('hidden');
@@ -1129,23 +1272,6 @@ async function searchPublicResult() {
         if (showGrade) renderPublicGradeSheet(student, term, cls);
         if (showAdmit) renderPublicAdmitCard(student, term, cls);
     }, 500);
-}
-
-function buildSignatureBlock(imgs, size) {
-    const coSignImg = (imgs && imgs.coSign) ? `<img src="${imgs.coSign}" style="height:${size}px; object-fit:contain; margin-bottom:2px;">` : '';
-    const htSignImg = (imgs && imgs.htSign) ? `<img src="${imgs.htSign}" style="height:${size}px; object-fit:contain; margin-bottom:2px;">` : '';
-    return `<div style="display:flex; justify-content:space-between; margin-top:30px; padding:0 20px; font-size:12px;">
-        <div style="text-align:center;">
-            <div style="height:${size + 5}px; display:flex; align-items:flex-end; justify-content:center; margin-bottom:2px;">${coSignImg}</div>
-            <div style="border-top:1px solid #1e3a8a; padding-top:5px; width:180px; font-weight:bold;">Chandra Shekhar Kasula</div>
-            <div style="font-size:11px; color:#1e3a8a;">परीक्षा संयोजक</div>
-        </div>
-        <div style="text-align:center;">
-            <div style="height:${size + 5}px; display:flex; align-items:flex-end; justify-content:center; margin-bottom:2px;">${htSignImg}</div>
-            <div style="border-top:1px solid #1e3a8a; padding-top:5px; width:180px; font-weight:bold;">Tempa Risang Ghale</div>
-            <div style="font-size:11px; color:#1e3a8a;">प्रधानाध्यापक</div>
-        </div>
-    </div>`;
 }
 
 function renderPublicGradeSheet(student, term, cls) {
@@ -1213,8 +1339,9 @@ function renderPublicAdmitCard(student, term, cls) {
     const logoImg = imgs.logo ? `<img src="${imgs.logo}" style="width:70px; height:70px; object-fit:contain;">` : `<div style="width:70px; height:70px; background:#1e3a8a; border-radius:50%; display:flex; align-items:center; justify-content:center; color:white; font-weight:bold;">RSS</div>`;
     const routine = (state.examSettings.routines && state.examSettings.routines[cls]) || [];
     const routineTimes = state.examSettings.routineTimes || {};
+    const defaultTime = state.examSettings.defaultRoutineTime || '11:00 AM - 2:00 PM';
     let routineRows = routine.length > 0 ? routine.map((r, i) => {
-        const timeVal = routineTimes[r.date] || '11:00 AM - 2:00 PM';
+        const timeVal = routineTimes[r.date] || defaultTime;
         return `<tr><td style="border:1px solid #1e3a8a; padding:4px 6px; text-align:center;">${i+1}</td><td style="border:1px solid #1e3a8a; padding:4px 6px; text-align:center;">${formatDateBS(r.date)}</td><td style="border:1px solid #1e3a8a; padding:4px 6px;">${r.subject || '-'}</td><td style="border:1px solid #1e3a8a; padding:4px 6px; text-align:center;">${timeVal}</td></tr>`;
     }).join('') : '<tr><td colspan="4" style="border:1px solid #1e3a8a; padding:8px; text-align:center;">No routine published yet.</td></tr>';
     const symNo = student.symbolNo || '';
@@ -1533,6 +1660,7 @@ function handleTeacherPasswordChange(e) {
 }
 
 
+
 // ============================================================
 // ACADEMICS
 // ============================================================
@@ -1706,6 +1834,7 @@ function renderExamRoutine(container) {
     if (!state.examSettings.routines || typeof state.examSettings.routines !== 'object') state.examSettings.routines = {};
     if (!Array.isArray(state.examSettings.routineDates) || state.examSettings.routineDates.length === 0) state.examSettings.routineDates = [''];
     if (!state.examSettings.routineTimes || typeof state.examSettings.routineTimes !== 'object') state.examSettings.routineTimes = {};
+    if (!state.examSettings.defaultRoutineTime) state.examSettings.defaultRoutineTime = '11:00 AM - 2:00 PM';
     const dates = state.examSettings.routineDates;
     const classes = Array.isArray(state.classes) ? state.classes : [];
     if (dates.length === 1 && !dates[0]) { const discovered = []; Object.values(state.examSettings.routines || {}).forEach(rows => { (Array.isArray(rows) ? rows : []).forEach(r => { if (r && r.date && !discovered.includes(r.date)) discovered.push(r.date); }); }); if (discovered.length) state.examSettings.routineDates = discovered; }
@@ -1723,32 +1852,53 @@ function renderExamRoutine(container) {
         return `<tr><th class="border border-gray-200 bg-gray-50 px-3 py-3 text-left font-semibold text-gray-700 whitespace-nowrap sticky left-0 z-10">${escapeHtml(cls)}</th>${cells}</tr>`;
     }).join('');
     const headerDates = activeDates.map((date, i) => {
-        const timeVal = (state.examSettings.routineTimes && state.examSettings.routineTimes[date]) || '11:00 AM - 2:00 PM';
-        return `<th class="border border-gray-200 bg-gray-50 p-2 min-w-[180px] align-top">
-            <div class="flex flex-col gap-1">
-                <div class="flex items-center gap-1">
-                    <input type="text" class="routine-date w-full px-2 py-2 border border-gray-200 rounded-md text-sm focus:ring-2 focus:ring-blue-500 bg-white" data-date-index="${i}" value="${date || ''}" placeholder="2083-05-01">
-                    <button type="button" onclick="removeRoutineDate(${i})" class="shrink-0 w-8 h-8 rounded-md text-red-500 hover:bg-red-50 hover:text-red-700" title="Remove date"><i class="fas fa-times"></i></button>
-                </div>
-                <input type="text" class="routine-time w-full px-2 py-1.5 border border-blue-200 rounded-md text-xs focus:ring-2 focus:ring-blue-500 bg-blue-50/40 text-blue-800 font-medium" data-date-index="${i}" value="${timeVal}" placeholder="11:00 AM - 2:00 PM">
-            </div>
-        </th>`;
+        const perDayTime = (state.examSettings.routineTimes && state.examSettings.routineTimes[date]) || '';
+        const defaultTime = state.examSettings.defaultRoutineTime || '11:00 AM - 2:00 PM';
+        return `<th class="border border-gray-200 bg-gray-50 p-2 min-w-[180px] align-top"><div class="flex flex-col gap-1"><div class="flex items-center gap-1"><input type="text" class="routine-date w-full px-2 py-2 border border-gray-200 rounded-md text-sm focus:ring-2 focus:ring-blue-500 bg-white" data-date-index="${i}" value="${date || ''}" placeholder="2083-05-01"><button type="button" onclick="removeRoutineDate(${i})" class="shrink-0 w-8 h-8 rounded-md text-red-500 hover:bg-red-50 hover:text-red-700" title="Remove date"><i class="fas fa-times"></i></button></div><input type="text" class="routine-time-per-day w-full px-2 py-1.5 border border-blue-200 rounded-md text-xs focus:ring-2 focus:ring-blue-500 bg-blue-50/40 text-blue-800 font-medium" data-date-index="${i}" value="${perDayTime}" placeholder="${escapeHtml(defaultTime)}"><span class="text-[10px] text-gray-500">Blank = default</span></div></th>`;
     }).join('');
-    container.innerHTML = `<div class="fade-in flex flex-col h-full min-h-0"><div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4 no-print"><div><h3 class="text-lg font-bold text-gray-800">Exam Routine</h3><p class="text-xs text-gray-500 mt-1">First column: Class &nbsp;•&nbsp; First row: Date + Time &nbsp;•&nbsp; Select the relevant subject in each cell.</p></div><div class="flex flex-wrap gap-2"><button type="button" onclick="addRoutineDate()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-lg text-sm font-bold shadow-sm flex items-center gap-2"><i class="fas fa-calendar-plus"></i> Add Date</button><button type="button" onclick="saveExamRoutineMatrix()" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2.5 rounded-lg text-sm font-bold shadow-sm flex items-center gap-2"><i class="fas fa-save"></i> Save Routine</button><button type="button" onclick="window.print()" class="bg-gray-800 hover:bg-black text-white px-4 py-2.5 rounded-lg text-sm font-bold shadow-sm flex items-center gap-2"><i class="fas fa-print"></i> Print</button></div></div><div class="flex-1 min-h-0 overflow-auto border border-gray-200 rounded-lg bg-white custom-scrollbar"><table class="w-full border-collapse text-sm min-w-max"><thead class="sticky top-0 z-20"><tr><th class="border border-gray-200 bg-blue-50 px-4 py-3 text-left font-bold text-blue-800 sticky left-0 top-0 z-30 min-w-[130px]">Class</th>${headerDates}</tr></thead><tbody>${rows || `<tr><td colspan="${activeDates.length + 1}" class="text-center py-8 text-gray-500">No classes configured.</td></tr>`}</tbody></table></div></div>`;
+    container.innerHTML = `<div class="fade-in flex flex-col h-full min-h-0"><div class="flex flex-col gap-3 mb-4 no-print"><div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"><div><h3 class="text-lg font-bold text-gray-800">Exam Routine</h3><p class="text-xs text-gray-500 mt-1">First column: Class &nbsp;•&nbsp; First row: Date &nbsp;•&nbsp; Select the relevant subject in each cell.</p></div><div class="flex flex-wrap gap-2"><button type="button" onclick="addRoutineDate()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-lg text-sm font-bold shadow-sm flex items-center gap-2"><i class="fas fa-calendar-plus"></i> Add Date</button><button type="button" onclick="saveExamRoutineMatrix()" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2.5 rounded-lg text-sm font-bold shadow-sm flex items-center gap-2"><i class="fas fa-save"></i> Save Routine</button><button type="button" onclick="window.print()" class="bg-gray-800 hover:bg-black text-white px-4 py-2.5 rounded-lg text-sm font-bold shadow-sm flex items-center gap-2"><i class="fas fa-print"></i> Print</button></div></div><div class="bg-blue-50 border-2 border-blue-200 rounded-lg p-3 flex flex-col sm:flex-row gap-3 items-stretch sm:items-end"><div class="flex-1"><label class="block text-xs font-bold text-blue-900 mb-1"><i class="fas fa-clock mr-1"></i> Default Exam Time</label><input type="text" id="routine-default-time" class="w-full px-3 py-2 border-2 border-blue-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 bg-white font-medium" value="${escapeHtml(state.examSettings.defaultRoutineTime || '11:00 AM - 2:00 PM')}" placeholder="e.g. 11:00 AM - 2:00 PM"></div><button type="button" onclick="applyDefaultTimeToAll()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-sm flex items-center justify-center gap-2 whitespace-nowrap"><i class="fas fa-layer-group"></i> Apply to All Days</button><button type="button" onclick="clearAllPerDayTimes()" class="bg-white border border-red-300 text-red-600 hover:bg-red-50 px-4 py-2 rounded-lg text-sm font-bold shadow-sm flex items-center justify-center gap-2 whitespace-nowrap"><i class="fas fa-times"></i> Clear Per-Day</button></div></div><div class="flex-1 min-h-0 overflow-auto border border-gray-200 rounded-lg bg-white custom-scrollbar"><table class="w-full border-collapse text-sm min-w-max"><thead class="sticky top-0 z-20"><tr><th class="border border-gray-200 bg-blue-50 px-4 py-3 text-left font-bold text-blue-800 sticky left-0 top-0 z-30 min-w-[130px]">Class</th>${headerDates}</tr></thead><tbody>${rows || `<tr><td colspan="${activeDates.length + 1}" class="text-center py-8 text-gray-500">No classes configured.</td></tr>`}</tbody></table></div></div>`;
 }
 
 function addRoutineDate() { if (!state.examSettings) state.examSettings = {}; if (!Array.isArray(state.examSettings.routineDates)) state.examSettings.routineDates = []; state.examSettings.routineDates.push(''); renderExamRoutine(document.getElementById('exam-process-content')); }
 function removeRoutineDate(index) { if (!state.examSettings || !Array.isArray(state.examSettings.routineDates)) return; if (state.examSettings.routineDates.length <= 1) state.examSettings.routineDates = ['']; else state.examSettings.routineDates.splice(index, 1); renderExamRoutine(document.getElementById('exam-process-content')); }
+
+function applyDefaultTimeToAll() {
+    const defTime = (document.getElementById('routine-default-time')?.value || '').trim() || '11:00 AM - 2:00 PM';
+    state.examSettings.defaultRoutineTime = defTime;
+    if (!state.examSettings.routineTimes) state.examSettings.routineTimes = {};
+    const dateInputs = Array.from(document.querySelectorAll('.routine-date'));
+    dateInputs.forEach(inp => { const d = inp.value.trim(); if (d) state.examSettings.routineTimes[d] = defTime; });
+    saveState(true, 'meta');
+    showToast(`✅ Applied "${defTime}" to all days.`, 'success');
+    renderExamRoutine(document.getElementById('exam-process-content'));
+}
+
+function clearAllPerDayTimes() {
+    state.examSettings.routineTimes = {};
+    saveState(true, 'meta');
+    showToast('Cleared all per-day times. Default time will be used.', 'info');
+    renderExamRoutine(document.getElementById('exam-process-content'));
+}
+
 function saveExamRoutineMatrix() {
     const dateInputs = Array.from(document.querySelectorAll('.routine-date'));
-    const timeInputs = Array.from(document.querySelectorAll('.routine-time'));
+    const perDayTimeInputs = Array.from(document.querySelectorAll('.routine-time-per-day'));
+    const defaultTimeInput = document.getElementById('routine-default-time');
+    const defaultTime = (defaultTimeInput?.value || '').trim() || '11:00 AM - 2:00 PM';
     const dates = dateInputs.map(input => input.value.trim());
-    const times = timeInputs.map(input => input.value.trim() || '11:00 AM - 2:00 PM');
-    if (dates.some(d => !d)) { showToast('Please enter/select a date in every date column.', 'error'); return; }
+    if (dates.some(d => !d)) { showToast('Please enter a date in every date column.', 'error'); return; }
     const duplicateDates = dates.filter((d, i) => dates.indexOf(d) !== i);
     if (duplicateDates.length) { showToast('Each routine date must be unique.', 'error'); return; }
+    state.examSettings.defaultRoutineTime = defaultTime;
     if (!state.examSettings.routineTimes) state.examSettings.routineTimes = {};
-    dates.forEach((d, i) => { state.examSettings.routineTimes[d] = times[i]; });
+    const oldRoutineTimes = { ...state.examSettings.routineTimes };
+    state.examSettings.routineTimes = {};
+    dates.forEach((d, i) => {
+        const perDay = (perDayTimeInputs[i]?.value || '').trim();
+        if (perDay) state.examSettings.routineTimes[d] = perDay;
+        else if (oldRoutineTimes[d]) state.examSettings.routineTimes[d] = oldRoutineTimes[d];
+        else state.examSettings.routineTimes[d] = defaultTime;
+    });
     const duplicateCheck = new Set();
     const newRoutines = {};
     const selects = Array.from(document.querySelectorAll('.routine-subject'));
@@ -1845,36 +1995,92 @@ function loadAdmitCards() {
     const sName = state.examSettings.schoolName || 'Shree Rasuwa Secondary School';
     const sAddress = state.examSettings.schoolAddress || 'Gosaikunda RM-6, Dhunche, Rasuwa';
     const imgs = state.examSettings.images || {};
-    const logoImg = imgs.logo ? `<img src="${imgs.logo}" style="width:70px; height:70px; object-fit:contain;">` : `<div style="width:70px; height:70px; background:#1e3a8a; border-radius:50%; display:flex; align-items:center; justify-content:center; color:white; font-weight:bold;">RSS</div>`;
+    const logoImg = imgs.logo ? `<img src="${imgs.logo}" style="width:60px; height:60px; object-fit:contain;">` : `<div style="width:60px; height:60px; background:#1e3a8a; border-radius:50%; display:flex; align-items:center; justify-content:center; color:white; font-weight:bold; font-size:14px;">RSS</div>`;
     const classRoutine = (state.examSettings.routines && state.examSettings.routines[cls]) || [];
     const routineTimes = state.examSettings.routineTimes || {};
-    const sigBlock = buildSignatureBlock(imgs, 35);
+    const defaultTime = state.examSettings.defaultRoutineTime || '11:00 AM - 2:00 PM';
+    const sigBlock = buildSignatureBlock(imgs, 30);
     let cardsHtml = clsStudents.map((student) => {
         const examTitle = `${term} Examination - ${year}`;
         let routineRows = classRoutine.length > 0 ? classRoutine.map((r, i) => {
-            const timeVal = routineTimes[r.date] || '11:00 AM - 2:00 PM';
-            return `<tr><td style="border:1px solid #1e3a8a; padding:4px 6px; text-align:center;">${i+1}</td><td style="border:1px solid #1e3a8a; padding:4px 6px; text-align:center;">${formatDateBS(r.date)}</td><td style="border:1px solid #1e3a8a; padding:4px 6px;">${r.subject || '-'}</td><td style="border:1px solid #1e3a8a; padding:4px 6px; text-align:center;">${timeVal}</td></tr>`;
-        }).join('') : '<tr><td colspan="4" style="border:1px solid #1e3a8a; padding:8px; text-align:center;">No routine published yet.</td></tr>';
+            const timeVal = routineTimes[r.date] || defaultTime;
+            return `<tr>
+                <td style="border:1px solid #1e3a8a; padding:2px 4px; text-align:center;">${i+1}</td>
+                <td style="border:1px solid #1e3a8a; padding:2px 4px; text-align:center;">${formatDateBS(r.date)}</td>
+                <td style="border:1px solid #1e3a8a; padding:2px 4px; text-align:left;">${r.subject || '-'}</td>
+                <td style="border:1px solid #1e3a8a; padding:2px 4px; text-align:center;">${timeVal}</td>
+            </tr>`;
+        }).join('') : '<tr><td colspan="4" style="border:1px solid #1e3a8a; padding:6px; text-align:center;">No routine published yet.</td></tr>';
         const symNo = student.symbolNo || '';
         const symNumMatch = symNo.match(/\d+/);
         let symWords = '';
         if (symNumMatch) symWords = numToWords(parseInt(symNumMatch[0], 10));
         const alphaMatch = symNo.match(/[a-zA-Z]+$/);
         if (alphaMatch) symWords += ' - ' + alphaMatch[0].toUpperCase();
-        const innerCardHTML = `<div style="font-family:'Times New Roman', serif; color:#000; height:100%; display:flex; flex-direction:column;"><div style="display:flex; align-items:center; justify-content:space-between; border-bottom:2px solid #1e3a8a; padding-bottom:8px; margin-bottom:12px;"><div style="width:70px;">${logoImg}</div><div style="text-align:center; flex:1;"><h1 style="font-size:18px; font-weight:bold; margin:0; color:#1e3a8a; text-transform:uppercase;">${sName}</h1><p style="font-size:11px; margin:3px 0;">${sAddress}</p><h2 style="font-size:13px; font-weight:bold; margin:5px 0 0 0; color:#1e3a8a;">${examTitle}</h2></div><div style="width:70px;"></div></div><div style="text-align:center; margin-bottom:10px;"><span style="background:#1e3a8a; color:white; padding:3px 16px; font-size:12px; font-weight:bold; border-radius:3px;">प्रवेश पत्र / ADMIT CARD</span></div><table style="width:100%; border-collapse:collapse; margin-bottom:12px; font-size:12px;"><tr><td style="border:1px solid #93c5fd; padding:4px 8px; background:#eff6ff; width:90px;">Name:</td><td style="border:1px solid #93c5fd; padding:4px 8px; font-weight:bold;">${student.name}</td><td style="border:1px solid #93c5fd; padding:4px 8px; background:#eff6ff; width:70px;">Class:</td><td style="border:1px solid #93c5fd; padding:4px 8px; font-weight:bold;">${student.className}</td></tr><tr><td style="border:1px solid #93c5fd; padding:4px 8px; background:#eff6ff;">Symbol No:</td><td style="border:1px solid #93c5fd; padding:4px 8px; font-weight:bold; color:#1e3a8a; font-size:13px;" colspan="3">${symNo}</td></tr><tr><td style="border:1px solid #93c5fd; padding:4px 8px; background:#eff6ff;">In Words:</td><td style="border:1px solid #93c5fd; padding:4px 8px; font-weight:bold;" colspan="3">${symWords}</td></tr></table><div style="text-align:center; font-weight:bold; font-size:12px; text-decoration:underline; margin-bottom:6px; color:#1e3a8a;">परीक्षा तालिका / EXAM ROUTINE</div><table style="width:100%; border-collapse:collapse; font-size:11px; margin-bottom:14px;"><thead><tr style="background:#1e3a8a; color:white;"><th style="border:1px solid #1e3a8a; padding:4px; width:35px;">S.N</th><th style="border:1px solid #1e3a8a; padding:4px; width:80px;">Exam Date</th><th style="border:1px solid #1e3a8a; padding:4px; text-align:left;">Subject</th><th style="border:1px solid #1e3a8a; padding:4px; width:110px;">Time</th></tr></thead><tbody>${routineRows}</tbody></table>${sigBlock}</div>`;
+        const innerCardHTML = `<div style="font-family:'Times New Roman', serif; color:#000; height:100%; display:flex; flex-direction:column;">
+            <div style="display:flex; align-items:center; justify-content:space-between; border-bottom:2px solid #1e3a8a; padding-bottom:5px; margin-bottom:6px;">
+                <div style="width:60px; flex-shrink:0;">${logoImg}</div>
+                <div style="text-align:center; flex:1; padding:0 4px;">
+                    <h1 style="font-size:15px; font-weight:bold; margin:0; color:#1e3a8a; text-transform:uppercase; line-height:1.1;">${sName}</h1>
+                    <p style="font-size:9px; margin:2px 0;">${sAddress}</p>
+                    <h2 style="font-size:11px; font-weight:bold; margin:2px 0 0 0; color:#1e3a8a;">${examTitle}</h2>
+                </div>
+                <div style="width:60px; flex-shrink:0;"></div>
+            </div>
+            <div style="text-align:center; margin-bottom:6px;">
+                <span style="background:#1e3a8a; color:white; padding:2px 12px; font-size:10px; font-weight:bold; border-radius:3px;">प्रवेश पत्र / ADMIT CARD</span>
+            </div>
+            <table style="width:100%; border-collapse:collapse; margin-bottom:6px; font-size:10px; table-layout:auto;">
+                <tr>
+                    <td style="border:1px solid #93c5fd; padding:2px 5px; background:#eff6ff; white-space:nowrap;">Name:</td>
+                    <td style="border:1px solid #93c5fd; padding:2px 5px; font-weight:bold;">${student.name}</td>
+                    <td style="border:1px solid #93c5fd; padding:2px 5px; background:#eff6ff; white-space:nowrap;">Class:</td>
+                    <td style="border:1px solid #93c5fd; padding:2px 5px; font-weight:bold;">${student.className}</td>
+                </tr>
+                <tr>
+                    <td style="border:1px solid #93c5fd; padding:2px 5px; background:#eff6ff; white-space:nowrap;">Symbol No:</td>
+                    <td style="border:1px solid #93c5fd; padding:2px 5px; font-weight:bold; color:#1e3a8a;" colspan="3">${symNo}</td>
+                </tr>
+                <tr>
+                    <td style="border:1px solid #93c5fd; padding:2px 5px; background:#eff6ff; white-space:nowrap;">In Words:</td>
+                    <td style="border:1px solid #93c5fd; padding:2px 5px; font-weight:bold;" colspan="3">${symWords}</td>
+                </tr>
+            </table>
+            <div style="text-align:center; font-weight:bold; font-size:10px; text-decoration:underline; margin-bottom:4px; color:#1e3a8a;">परीक्षा तालिका / EXAM ROUTINE</div>
+            <table style="width:100%; border-collapse:collapse; font-size:9.5px; margin-bottom:6px; flex-grow:1; table-layout:auto;">
+                <thead>
+                    <tr style="background:#1e3a8a; color:white;">
+                        <th style="border:1px solid #1e3a8a; padding:2px 4px; text-align:center; white-space:nowrap;">S.N</th>
+                        <th style="border:1px solid #1e3a8a; padding:2px 4px; text-align:center; white-space:nowrap;">Exam Date</th>
+                        <th style="border:1px solid #1e3a8a; padding:2px 4px; text-align:left;">Subject</th>
+                        <th style="border:1px solid #1e3a8a; padding:2px 4px; text-align:center; white-space:nowrap;">Time</th>
+                    </tr>
+                </thead>
+                <tbody>${routineRows}</tbody>
+            </table>
+            <div style="margin-top:auto;">${sigBlock}</div>
+        </div>`;
         const screenHTML = `<div class="admit-card-screen shadow-sm" style="border:2px solid #1e3a8a; padding:18px;">${innerCardHTML}</div>`;
-        const printHTML = `<div class="admit-card-print-box" style="border:2px solid #1e3a8a; padding:14px; height:100%; box-sizing:border-box;">${innerCardHTML}</div>`;
+        const printHTML = `<div class="admit-card-wrapper"><div class="admit-card-scale">${innerCardHTML}</div></div>`;
         return { screen: screenHTML, print: printHTML };
     });
     containerScreen.innerHTML = cardsHtml.map(c => c.screen).join('');
     let printGroups = '';
     const perPageNum = parseInt(perPage) || 4;
+    const pageClass = perPageNum === 2 ? 'admit-page-2' : 'admit-page-4';
     for (let i = 0; i < cardsHtml.length; i += perPageNum) {
         const group = cardsHtml.slice(i, i + perPageNum);
-        const gridClass = perPageNum === 2 ? 'admit-2-per-page' : 'admit-4-per-page';
-        printGroups += `<div class="${gridClass}">${group.map(c => c.print).join('')}</div>`;
+        printGroups += `<div class="${pageClass}">${group.map(c => c.print).join('')}</div>`;
     }
     containerPrint.innerHTML = printGroups;
+    const oldStyle = document.getElementById('dynamic-page-style');
+    if (oldStyle) oldStyle.remove();
+    const pageStyle = document.createElement('style');
+    pageStyle.id = 'dynamic-page-style';
+    pageStyle.textContent = perPageNum === 2
+        ? '@media print { @page { size: A4 landscape; margin: 0; } @page admitLandscape { size: A4 landscape; margin: 0; } @page admitPortrait { size: A4 portrait; margin: 0; } }'
+        : '@media print { @page { size: A4 portrait; margin: 0; } @page admitLandscape { size: A4 landscape; margin: 0; } @page admitPortrait { size: A4 portrait; margin: 0; } }';
+    document.head.appendChild(pageStyle);
 }
 
 function renderMarkSlip(container) {
