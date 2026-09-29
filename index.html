@@ -155,7 +155,7 @@
             </div>
             <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6 mb-4">
                 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                    <div><label class="block text-sm font-bold text-blue-900 mb-2">१. परीक्षा <span class="text-red-500">*</span></label><select id="pub-term" class="w-full px-3 py-2.5 border-2 border-gray-200 rounded-lg text-sm bg-white"><option value="">-- छान्नुहोस् --</option></select></div>
+                    <div><label class="block text-sm font-bold text-blue-900 mb-2">१. परीक्षा <span class="text-red-500">*</span></label><select id="pub-term" onchange="loadPublicSymbols()" class="w-full px-3 py-2.5 border-2 border-gray-200 rounded-lg text-sm bg-white"><option value="">-- छान्नुहोस् --</option></select></div>
                     <div><label class="block text-sm font-bold text-blue-900 mb-2">२. कक्षा <span class="text-red-500">*</span></label><select id="pub-class" onchange="loadPublicSymbols()" class="w-full px-3 py-2.5 border-2 border-gray-200 rounded-lg text-sm bg-white"><option value="">-- छान्नुहोस् --</option></select></div>
                     <div><label class="block text-sm font-bold text-blue-900 mb-2">३. सिम्बोल नं. <span class="text-red-500">*</span></label><select id="pub-symbol" class="w-full px-3 py-2.5 border-2 border-gray-200 rounded-lg text-sm bg-white"><option value="">-- छान्नुहोस् --</option></select></div>
                     <div><label class="block text-sm font-bold text-blue-900 mb-2">४. जन्म मिति <span class="text-red-500">*</span></label><input type="text" id="pub-dob" placeholder="2071-02-12" class="w-full px-3 py-2.5 border-2 border-gray-200 rounded-lg text-sm"></div>
@@ -202,6 +202,40 @@
         </main>
     </div>
 
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
+    import { getFirestore, doc, getDoc, setDoc, onSnapshot, getDocFromServer } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+    import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
+
+    const firebaseConfig = {
+        apiKey: "AIzaSyD_jCowXKj1oJRDFM9_8jKzVZvxJwPrlwM",
+        authDomain: "gen-lang-client-0670539434.firebaseapp.com",
+        databaseURL: "https://gen-lang-client-0670539434-default-rtdb.firebaseio.com",
+        projectId: "gen-lang-client-0670539434",
+        firestoreDatabaseId: "ai-studio-rasuwasecondarys-2d8e3c7b-eda7-4ff4-bed6-7ff7d809f459",
+        storageBucket: "gen-lang-client-0670539434.firebasestorage.app",
+        messagingSenderId: "700954170907",
+        appId: "1:700954170907:web:b6c649c9ad139fef5e8abe",
+        oAuthClientId: "700954170907-unj4holkbi2cn8hro2nl2maj3uvgdfa2.apps.googleusercontent.com"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+    const auth = getAuth(app);
+    const OperationType = { CREATE: 'create', UPDATE: 'update', DELETE: 'delete', LIST: 'list', GET: 'get', WRITE: 'write' };
+    function handleFirestoreError(error, operationType, path) {
+        const errInfo = { error: error instanceof Error ? error.message : String(error), authInfo: { userId: auth?.currentUser?.uid || null, email: auth?.currentUser?.email || null }, operationType, path };
+        console.error('Firestore Error: ', JSON.stringify(errInfo));
+        throw new Error(JSON.stringify(errInfo));
+    }
+    async function testConnection() { console.log("Firebase Firestore connected."); return true; }
+    window.portalFirebase = { app, db, auth, doc, getDoc, getDocFromServer, setDoc, onSnapshot, handleFirestoreError, OperationType, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged, testConnection };
+    window.portalFirebaseReadyDispatched = true;
+    window.dispatchEvent(new CustomEvent('portalFirebaseReady'));
+    if (typeof window.initPortalCloudSync === 'function') window.initPortalCloudSync();
+</script>
+
+
 <script>
 // ============================================================
 // GLOBAL HELPERS
@@ -231,6 +265,68 @@ window.switchLoginTab = function(role) {
         tabAdmin.className = "flex-1 py-2 text-sm font-semibold rounded-md text-gray-500 hover:text-gray-700 transition-all";
     }
 };
+
+// ============================================================
+// ✅ DOB NORMALIZE HELPER
+// Converts any format like "2065-1-1", "2065-01-1", "2065-1-01", "2065/1/1", "2065.1.1"
+// to standard "2065-01-01" format
+// ============================================================
+window.normalizeDOB = function(dob) {
+    if (!dob && dob !== 0) return '';
+    var str = String(dob).trim();
+    if (!str) return '';
+    // Match patterns like 2065-1-1, 2065/01/1, 2065.1.01, 2065_1_1
+    var match = str.match(/^(\d{1,4})[\-\/\.\s\_]+(\d{1,2})[\-\/\.\s\_]+(\d{1,2})$/);
+    if (match) {
+        var y = String(match[1]).padStart(4, '0');
+        var m = String(match[2]).padStart(2, '0');
+        var d = String(match[3]).padStart(2, '0');
+        // Validate ranges (BS month 1-12, day 1-32)
+        var mi = parseInt(m, 10), di = parseInt(d, 10);
+        if (mi >= 1 && mi <= 12 && di >= 1 && di <= 32) {
+            return y + '-' + m + '-' + d;
+        }
+    }
+    // If input has no separators but is 8-digit e.g. "20650101"
+    var digits = str.replace(/[^0-9]/g, '');
+    if (digits.length === 8) {
+        return digits.substr(0, 4) + '-' + digits.substr(4, 2) + '-' + digits.substr(6, 2);
+    }
+    // If 7-digit like "2065101" → assume YYYY-M-DD (e.g. 2065-1-01) → wait, ambiguous. Try YYYYMMDD best-effort.
+    if (digits.length === 7) {
+        // Assume format YYYYMDD or YYYYMMD — try YYYYMMDD first with leading zero on M
+        var y7 = digits.substr(0, 4);
+        var m7 = digits.substr(4, 1);
+        var d7 = digits.substr(5, 2);
+        return y7 + '-' + m7.padStart(2, '0') + '-' + d7;
+    }
+    if (digits.length === 6) {
+        // YYMMDD — rare in BS, but pad
+        return '20' + digits.substr(0, 2) + '-' + digits.substr(2, 2) + '-' + digits.substr(4, 2);
+    }
+    // Return as-is if no match
+    return str;
+};
+
+// ============================================================
+// ✅ PRO USER — Permission Definitions
+// ============================================================
+window.PRO_PERMISSIONS = [
+    { key: 'viewAllStudents', label: 'View All Students', icon: 'fa-users', desc: 'सबै कक्षाका विद्यार्थी हेर्न' },
+    { key: 'addStudents', label: 'Add Students', icon: 'fa-user-plus', desc: 'नयाँ विद्यार्थी थप्न' },
+    { key: 'editStudents', label: 'Edit Students', icon: 'fa-user-edit', desc: 'विद्यार्थी सम्पादन गर्न' },
+    { key: 'deleteStudents', label: 'Delete Students', icon: 'fa-user-minus', desc: 'विद्यार्थी हटाउन' },
+    { key: 'manageTeachers', label: 'Manage Teachers', icon: 'fa-chalkboard-teacher', desc: 'शिक्षकहरू व्यवस्थापन गर्न' },
+    { key: 'manageAcademic', label: 'Manage Academic', icon: 'fa-book', desc: 'कक्षा र विषय व्यवस्थापन' },
+    { key: 'manageTerms', label: 'Manage Terms', icon: 'fa-calendar-check', desc: 'परीक्षा terms व्यवस्थापन' },
+    { key: 'manageSubjectMgmt', label: 'Subject Management', icon: 'fa-list', desc: 'Subject र credit hour व्यवस्थापन' },
+    { key: 'manageExamProcess', label: 'Exam Process', icon: 'fa-file-alt', desc: 'Routine, Symbol No, Admit Card, Mark Slip' },
+    { key: 'manageResultMgmt', label: 'Result Management', icon: 'fa-award', desc: 'Marks conversion र Ledger' },
+    { key: 'manageGradeRules', label: 'Grade Rules', icon: 'fa-star', desc: 'Grade scale rules व्यवस्थापन' },
+    { key: 'viewAllAttendance', label: 'Attendance (All Classes)', icon: 'fa-calendar-check', desc: 'सबै कक्षाको attendance' },
+    { key: 'viewAnalytics', label: 'View Analytics', icon: 'fa-chart-line', desc: 'Result analytics' },
+    { key: 'manageSettings', label: 'Settings', icon: 'fa-upload', desc: 'School settings र backup' }
+];
 
 // ============================================================
 // STATE
@@ -323,17 +419,57 @@ function switchSession(year) {
 }
 
 // ============================================================
-// CLASS TEACHER PERMISSIONS
+// ✅ PERMISSION CHECKS (Admin / Pro / Class Teacher / Teacher)
 // ============================================================
+function isAdmin() { return state.currentUser && state.currentUser.role === 'admin'; }
+function isProUser() { return state.currentUser && state.currentUser.role === 'teacher' && state.currentUser.isPro === true; }
+function isClassTeacher() { return state.currentUser && state.currentUser.role === 'teacher' && (state.currentUser.classTeacherOf || []).length > 0; }
+function isNormalTeacher() { return state.currentUser && state.currentUser.role === 'teacher' && !state.currentUser.isPro && (state.currentUser.classTeacherOf || []).length === 0; }
+
+// Check a Pro permission — Admin always true
+function hasProPermission(permKey) {
+    if (isAdmin()) return true;
+    if (!isProUser()) return false;
+    var proPerms = state.currentUser.proPermissions || {};
+    return proPerms[permKey] === true;
+}
+
+// Legacy: CT permissions for student management in own class
 function getCtPermissions() {
     if (!state.currentUser) return { add: false, edit: false, delete: false };
-    if (state.currentUser.role === 'admin') return { add: true, edit: true, delete: true };
+    if (isAdmin()) return { add: true, edit: true, delete: true };
+    if (isProUser()) {
+        return {
+            add: hasProPermission('addStudents'),
+            edit: hasProPermission('editStudents'),
+            delete: hasProPermission('deleteStudents')
+        };
+    }
     var p = state.currentUser.studentPermissions || { add: true, edit: true, delete: true };
     return p;
 }
-function canEditStudents() { if (!state.currentUser) return false; if (state.currentUser.role === 'admin') return true; return (state.currentUser.classTeacherOf || []).length > 0; }
-function getEditableClasses() { if (!state.currentUser) return []; if (state.currentUser.role === 'admin') return state.classes; return state.currentUser.classTeacherOf || []; }
-function canEditStudentInClass(className) { if (!state.currentUser) return false; if (state.currentUser.role === 'admin') return true; return (state.currentUser.classTeacherOf || []).includes(className); }
+
+// Which classes can this user edit students in
+function getEditableClasses() {
+    if (!state.currentUser) return [];
+    if (isAdmin()) return state.classes;
+    if (isProUser() && hasProPermission('viewAllStudents')) return state.classes;
+    return state.currentUser.classTeacherOf || [];
+}
+
+function canEditStudentInClass(className) {
+    if (!state.currentUser) return false;
+    if (isAdmin()) return true;
+    if (isProUser() && hasProPermission('viewAllStudents')) return true;
+    return (state.currentUser.classTeacherOf || []).includes(className);
+}
+
+// Generic access to a full module
+function canAccessModule(moduleKey) {
+    if (isAdmin()) return true;
+    if (!isProUser()) return false;
+    return hasProPermission(moduleKey);
+}
 
 // ============================================================
 // UTILITIES
@@ -341,8 +477,7 @@ function canEditStudentInClass(className) { if (!state.currentUser) return false
 function formatDateBS(dateStr) {
     if (!dateStr) return '-';
     if (/^\d{4}-\d{2}-\d{2}$/.test(String(dateStr))) return String(dateStr);
-    try { const d = new Date(dateStr); if (!isNaN(d.getTime())) { const y = d.getFullYear(); const m = String(d.getMonth() + 1).padStart(2, '0'); const day = String(d.getDate()).padStart(2, '0'); return y + '-' + m + '-' + day; } } catch (e) {}
-    return String(dateStr);
+    return window.normalizeDOB(dateStr) || '-';
 }
 function markDirty(section) {
     if (section) dirtySections.add(section);
@@ -390,12 +525,31 @@ function updateSaveIndicator(failed, overrideStatus) {
 // LOAD / SAVE STATE
 // ============================================================
 function migrateOldDataToSessions(saved) {
-    if (saved.sessions && Object.keys(saved.sessions).length > 0) return saved;
+    if (saved.sessions && Object.keys(saved.sessions).length > 0) {
+        // Normalize DOBs in already-migrated sessions
+        Object.keys(saved.sessions).forEach(function(y) {
+            var sess = saved.sessions[y];
+            if (sess && Array.isArray(sess.students)) {
+                sess.students.forEach(function(st) {
+                    if (st.dob) st.dob = window.normalizeDOB(st.dob);
+                    if (!st.symbolNos) st.symbolNos = {};
+                });
+            }
+        });
+        return saved;
+    }
     const year = String((saved.examSettings && saved.examSettings.academicYear) || '2083');
     const hasOld = (saved.students && saved.students.length) || (saved.marks && saved.marks.length) || (saved.attendance && saved.attendance.length);
     const session = createEmptySession(year);
     if (hasOld) {
-        session.students = saved.students || [];
+        session.students = (saved.students || []).map(function(st) {
+            if (st.dob) st.dob = window.normalizeDOB(st.dob);
+            if (!st.symbolNos) {
+                st.symbolNos = {};
+                if (st.symbolNo) st.symbolNos['First Term'] = st.symbolNo;
+            }
+            return st;
+        });
         session.marks = saved.marks || [];
         session.attendance = saved.attendance || [];
         if (Array.isArray(saved.terms)) session.terms = saved.terms.map((t, i) => ({ id: 'term-migrated-' + i, name: typeof t === 'string' ? t : (t.name || 'Term'), locked: false, published: false, createdAt: new Date().toISOString() }));
@@ -426,7 +580,20 @@ function loadSession() {
 }
 function saveSession() {
     try {
-        if (state.currentUser) sessionStorage.setItem(SESSION_KEY, JSON.stringify({ role: state.currentUser.role, id: state.currentUser.id, username: state.currentUser.username, fullName: state.currentUser.fullName, email: state.currentUser.email, contact: state.currentUser.contact, assignments: state.currentUser.assignments || [], classTeacherOf: state.currentUser.classTeacherOf || [], studentPermissions: state.currentUser.studentPermissions || { add: true, edit: true, delete: true }, impersonating: !!state.currentUser.impersonating }));
+        if (state.currentUser) sessionStorage.setItem(SESSION_KEY, JSON.stringify({
+            role: state.currentUser.role,
+            id: state.currentUser.id,
+            username: state.currentUser.username,
+            fullName: state.currentUser.fullName,
+            email: state.currentUser.email,
+            contact: state.currentUser.contact,
+            assignments: state.currentUser.assignments || [],
+            classTeacherOf: state.currentUser.classTeacherOf || [],
+            studentPermissions: state.currentUser.studentPermissions || { add: true, edit: true, delete: true },
+            isPro: !!state.currentUser.isPro,
+            proPermissions: state.currentUser.proPermissions || {},
+            impersonating: !!state.currentUser.impersonating
+        }));
         else sessionStorage.removeItem(SESSION_KEY);
     } catch (e) {}
 }
@@ -498,6 +665,11 @@ async function pullLatestFromCloud(silent) {
         if (teachersSnap && teachersSnap.exists()) { const d = teachersSnap.data(); if (d.list && d.list.length) state.teachers = d.list; }
         if (!state.activeSession && Object.keys(state.sessions).length) state.activeSession = Object.keys(state.sessions)[0];
         ensureSessionExists(state.activeSession || '2083');
+        // Normalize all student DOBs after cloud pull
+        Object.keys(state.sessions).forEach(function(y) {
+            var sess = state.sessions[y];
+            if (sess && Array.isArray(sess.students)) sess.students.forEach(function(st) { if (st.dob) st.dob = window.normalizeDOB(st.dob); if (!st.symbolNos) st.symbolNos = {}; });
+        });
         try { localStorage.setItem(STORAGE_KEY, JSON.stringify(persistableState())); } catch (e) {}
         dirtySections.clear(); lastCloudSyncTime = new Date(); cloudSyncStatus = 'synced'; updateSaveIndicator();
         if (typeof smartRefreshActivePage === 'function') smartRefreshActivePage();
@@ -539,7 +711,11 @@ async function initPortalCloudSync() {
             if (d.examSettings) state.examSettings = d.examSettings;
         });
         attach(fb.doc(fb.db, 'school_portal', 'all_sessions'), 'sessions', function(d) {
-            if (d.sessions && Object.keys(d.sessions).length) { state.sessions = d.sessions; if (d.activeSession) state.activeSession = d.activeSession; ensureSessionExists(state.activeSession || '2083'); }
+            if (d.sessions && Object.keys(d.sessions).length) {
+                state.sessions = d.sessions; if (d.activeSession) state.activeSession = d.activeSession;
+                ensureSessionExists(state.activeSession || '2083');
+                Object.keys(state.sessions).forEach(function(y) { var sess = state.sessions[y]; if (sess && Array.isArray(sess.students)) sess.students.forEach(function(st) { if (st.dob) st.dob = window.normalizeDOB(st.dob); if (!st.symbolNos) st.symbolNos = {}; }); });
+            }
         });
         attach(fb.doc(fb.db, 'school_portal', 'teachers'), 'teachers', function(d) { if (d.list && d.list.length) state.teachers = d.list; });
     } catch (e) { console.error('Cloud init error:', e); cloudSyncStatus = 'error'; updateSaveIndicator(true); }
@@ -547,6 +723,7 @@ async function initPortalCloudSync() {
 }
 window.initPortalCloudSync = initPortalCloudSync;
 window.addEventListener('portalFirebaseReady', function() { initPortalCloudSync(); });
+
 function smartRefreshActivePage() {
     if (!state.currentUser || !currentPageId) return;
     const a = document.activeElement;
@@ -572,15 +749,15 @@ window.signInWithGoogle = async function() {
         const userEmail = (user.email || '').trim().toLowerCase();
         let adminEmails = (state.adminEmails || ['kasulachandrashekhar@gmail.com']).map(e => e.trim().toLowerCase());
         if (!adminEmails.includes('kasulachandrashekhar@gmail.com')) adminEmails.push('kasulachandrashekhar@gmail.com');
-        const isAdmin = adminEmails.includes(userEmail);
-        if (isAdmin) {
+        const isAdm = adminEmails.includes(userEmail);
+        if (isAdm) {
             state.currentUser = { role: 'admin', username: user.displayName || 'Administrator', email: user.email };
             saveSession(); loadApp(); showToast('Welcome Admin!', 'success'); return;
         }
         const teacher = state.teachers.find(t => (t.email || '').toLowerCase() === userEmail || (t.username || '').toLowerCase() === userEmail);
         if (teacher) {
-            state.currentUser = Object.assign({}, teacher, { role: 'teacher', email: user.email });
-            saveSession(); loadApp(); showToast('Welcome ' + (teacher.fullName || teacher.username) + '!', 'success'); return;
+            state.currentUser = Object.assign({}, teacher, { role: 'teacher', email: user.email, isPro: !!teacher.isPro, proPermissions: teacher.proPermissions || {} });
+            saveSession(); loadApp(); showToast('Welcome ' + (teacher.fullName || teacher.username) + (teacher.isPro ? ' (Pro)' : '') + '!', 'success'); return;
         }
         await fb.signOut(fb.auth).catch(function(){});
         state.currentUser = null; saveSession();
@@ -629,14 +806,17 @@ window.handleLogin = async function(e) {
                 } catch (e) {}
             }
             if (teacher) {
-                state.currentUser = Object.assign({}, teacher, { role: 'teacher' });
-                saveSession(); loadApp(); showToast('Welcome ' + (teacher.fullName || teacher.username) + '!', 'success');
+                state.currentUser = Object.assign({}, teacher, { role: 'teacher', isPro: !!teacher.isPro, proPermissions: teacher.proPermissions || {} });
+                saveSession(); loadApp();
+                var tag = teacher.isPro ? ' (Pro User)' : '';
+                showToast('Welcome ' + (teacher.fullName || teacher.username) + tag + '!', 'success');
             } else { showToast('Invalid Teacher Credentials', 'error'); }
         }
     } finally {
         if (submitBtn) { submitBtn.disabled = false; submitBtn.innerHTML = origHtml; }
     }
 };
+
 window.logout = function() {
     if (window.portalFirebase && window.portalFirebase.auth) window.portalFirebase.signOut(window.portalFirebase.auth).catch(function(){});
     state.currentUser = null;
@@ -648,16 +828,19 @@ window.logout = function() {
     document.getElementById('password').value = '';
     showToast('Logged out', 'info');
 };
+
 window.loadApp = function() {
     if (!state.activeSession) state.activeSession = state.examSettings.academicYear || '2083';
     ensureSessionExists(state.activeSession);
-    // Load fresh teacher permissions
+    // Load fresh teacher data (permissions may have changed)
     if (state.currentUser.role === 'teacher' && state.currentUser.id) {
         var freshT = state.teachers.find(t => t.id === state.currentUser.id);
         if (freshT) {
             state.currentUser.studentPermissions = freshT.studentPermissions || { add: true, edit: true, delete: true };
             state.currentUser.classTeacherOf = freshT.classTeacherOf || [];
             state.currentUser.assignments = freshT.assignments || [];
+            state.currentUser.isPro = !!freshT.isPro;
+            state.currentUser.proPermissions = freshT.proPermissions || {};
         }
     }
     if (typeof initPortalCloudSync === 'function') initPortalCloudSync();
@@ -665,7 +848,10 @@ window.loadApp = function() {
     document.getElementById('public-result-portal').classList.add('hidden');
     document.getElementById('main-app').classList.remove('hidden');
     injectSessionSwitcherInHeader();
-    let roleDisplay = state.currentUser.role === 'admin' ? 'Admin Portal' : 'Teacher Portal';
+    let roleDisplay = 'Teacher Portal';
+    if (state.currentUser.role === 'admin') roleDisplay = 'Admin Portal';
+    else if (isProUser()) roleDisplay = 'Pro User Portal';
+    else if (isClassTeacher()) roleDisplay = 'Class Teacher Portal';
     if (state.currentUser.impersonating) roleDisplay = 'Teacher View (Admin)';
     document.getElementById('user-role-display').innerText = roleDisplay;
     let dName = state.currentUser.username || state.currentUser.fullName || 'User';
@@ -675,53 +861,54 @@ window.loadApp = function() {
     let targetPage = state.currentUser.role === 'admin' ? 'manage-students' : 'mark-entry';
     try {
         const saved = sessionStorage.getItem('rss_current_page_v1');
-        const adminPages = ['manage-students', 'manage-teachers', 'admin-teacher-view', 'manage-academic', 'subject-management', 'exam-process', 'result-mgmt', 'grade-rules', 'view-results', 'result-analytics', 'student-attendance', 'upload-settings', 'term-management'];
-        const teacherPages = ['mark-entry', 'my-classes', 'student-attendance', 'profile-settings', 'view-results', 'result-analytics', 'manage-students'];
-        const allowed = state.currentUser.role === 'admin' ? adminPages : teacherPages;
-        if (saved && allowed.includes(saved)) targetPage = saved;
+        if (saved && canAccessPage(saved)) targetPage = saved;
     } catch (e) {}
+    if (!canAccessPage(targetPage)) targetPage = getDefaultPage();
     navigate(targetPage);
 };
-function injectSessionSwitcherInHeader() {
-    const headerRight = document.querySelector('#main-app header > div:last-child');
-    if (!headerRight) return;
-    const old = document.getElementById('session-switcher-wrapper');
-    if (old) old.remove();
-    const wrapper = document.createElement('div');
-    wrapper.id = 'session-switcher-wrapper';
-    wrapper.className = 'hidden sm:flex items-center';
-    wrapper.innerHTML = renderSessionSwitcher();
-    headerRight.insertBefore(wrapper, headerRight.firstChild);
+
+// Determine default page based on role
+function getDefaultPage() {
+    if (isAdmin()) return 'manage-students';
+    if (isProUser()) {
+        if (hasProPermission('viewAllStudents')) return 'manage-students';
+        if (hasProPermission('manageTeachers')) return 'manage-teachers';
+        if (hasProPermission('manageAcademic')) return 'manage-academic';
+        if (hasProPermission('manageTerms')) return 'term-management';
+        if (hasProPermission('manageResultMgmt')) return 'result-mgmt';
+        if (hasProPermission('viewAnalytics')) return 'result-analytics';
+        if (hasProPermission('viewAllAttendance')) return 'student-attendance';
+    }
+    return 'mark-entry';
 }
-function renderSessionSwitcher() {
-    const years = getSessionYears();
-    const active = state.activeSession || '2083';
-    let opts = years.map(y => '<option value="' + y + '"' + (y === active ? ' selected' : '') + '>' + y + ' B.S.</option>').join('');
-    if (!years.includes(active)) opts = '<option value="' + active + '" selected>' + active + ' B.S.</option>' + opts;
-    return '<div class="flex items-center gap-1 bg-blue-50 border border-blue-200 rounded-lg px-2 py-1"><i class="fas fa-calendar-alt text-blue-600 text-xs"></i><select id="session-switcher" onchange="handleSessionSwitch(this.value)" class="bg-transparent text-xs font-bold text-blue-900 cursor-pointer">' + opts + '</select><button onclick="promptAddNewSession()" class="text-blue-600 hover:text-blue-800 p-1" title="Add Session"><i class="fas fa-plus-circle text-xs"></i></button></div>';
+
+// Check if current user can access a given page
+function canAccessPage(pageId) {
+    if (isAdmin()) return true;
+    if (isProUser()) {
+        if (pageId === 'manage-students') return hasProPermission('viewAllStudents');
+        if (pageId === 'manage-teachers') return hasProPermission('manageTeachers');
+        if (pageId === 'manage-academic') return hasProPermission('manageAcademic');
+        if (pageId === 'term-management') return hasProPermission('manageTerms');
+        if (pageId === 'subject-management') return hasProPermission('manageSubjectMgmt');
+        if (pageId === 'exam-process') return hasProPermission('manageExamProcess');
+        if (pageId === 'result-mgmt') return hasProPermission('manageResultMgmt');
+        if (pageId === 'grade-rules') return hasProPermission('manageGradeRules');
+        if (pageId === 'student-attendance') return hasProPermission('viewAllAttendance');
+        if (pageId === 'upload-settings') return hasProPermission('manageSettings');
+        if (pageId === 'result-analytics') return hasProPermission('viewAnalytics') || true; // Pro can always see analytics
+        if (pageId === 'view-results') return hasProPermission('viewAnalytics') || hasProPermission('manageResultMgmt');
+        if (pageId === 'admin-teacher-view') return false;
+    }
+    // Teacher / Class Teacher — limited pages
+    var teacherPages = ['mark-entry', 'my-classes', 'profile-settings', 'result-analytics', 'student-attendance', 'manage-students', 'view-results'];
+    if (teacherPages.indexOf(pageId) === -1) return false;
+    if (pageId === 'student-attendance') {
+        return isClassTeacher();
+    }
+    if (pageId === 'manage-students') return isClassTeacher();
+    return true;
 }
-window.handleSessionSwitch = function(year) {
-    if (year === state.activeSession) return;
-    const session = ensureSessionExists(year);
-    if (session.students.length === 0) showToast('New session ' + year + ' is empty.', 'info');
-    switchSession(year);
-};
-window.promptAddNewSession = function() {
-    const input = prompt("Enter new session year (e.g. 2084):", String(parseInt(state.activeSession || '2083') + 1));
-    if (!input) return;
-    const year = input.trim();
-    if (!/^\d{4}$/.test(year)) { showToast('Enter valid 4-digit year', 'error'); return; }
-    if (state.sessions[year]) { showToast('Session exists. Switching...', 'warning'); handleSessionSwitch(year); return; }
-    ensureSessionExists(year); saveState(true, 'meta');
-    showToast('✅ Session ' + year + ' created!', 'success');
-    handleSessionSwitch(year);
-};
-window.toggleCtPermissions = function(show) {
-    var box = document.getElementById('ct-permissions-box');
-    if (!box) return;
-    if (show) box.classList.remove('hidden');
-    else box.classList.add('hidden');
-};
 
 // ============================================================
 // SIDEBAR
@@ -730,8 +917,9 @@ function buildSidebar() {
     const nav = document.getElementById('nav-menu');
     if (!nav) return;
     nav.innerHTML = '';
-    let links = [];
-    if (state.currentUser.role === 'admin') {
+    var links = [];
+
+    if (isAdmin()) {
         links = [
             { id: 'manage-students', icon: 'fa-users', text: 'Manage Students' },
             { id: 'manage-teachers', icon: 'fa-chalkboard-teacher', text: 'Manage Teachers' },
@@ -749,6 +937,25 @@ function buildSidebar() {
             { id: 'student-attendance', icon: 'fa-calendar-check', text: 'Attendance' },
             { id: 'upload-settings', icon: 'fa-upload', text: 'Settings' }
         ];
+    } else if (isProUser()) {
+        // Pro User — build sidebar based on granted permissions
+        if (hasProPermission('viewAllStudents')) links.push({ id: 'manage-students', icon: 'fa-users', text: 'Manage Students' });
+        if (hasProPermission('manageTeachers')) links.push({ id: 'manage-teachers', icon: 'fa-chalkboard-teacher', text: 'Manage Teachers' });
+        if (hasProPermission('manageAcademic')) links.push({ id: 'manage-academic', icon: 'fa-book', text: 'Classes & Subjects' });
+        if (hasProPermission('manageTerms')) links.push({ id: 'term-management', icon: 'fa-calendar-check', text: 'Manage Terms' });
+        var examChildren = [];
+        if (hasProPermission('manageSubjectMgmt')) examChildren.push({ id: 'subject-management', text: 'Subject Management' });
+        if (hasProPermission('manageExamProcess')) examChildren.push({ id: 'exam-process', text: 'Exam Process' });
+        if (hasProPermission('manageResultMgmt')) examChildren.push({ id: 'result-mgmt', text: 'Result Management' });
+        if (examChildren.length > 0) links.push({ id: 'group-exam', icon: 'fa-file-alt', text: 'Manage Exam', isGroup: true, children: examChildren });
+        if (hasProPermission('manageGradeRules')) links.push({ id: 'grade-rules', icon: 'fa-star', text: 'Grade Rules' });
+        if (hasProPermission('viewAnalytics') || hasProPermission('manageResultMgmt')) links.push({ id: 'view-results', icon: 'fa-chart-bar', text: 'View Results' });
+        if (hasProPermission('viewAnalytics')) links.push({ id: 'result-analytics', icon: 'fa-chart-line', text: 'Analytics' });
+        if (hasProPermission('viewAllAttendance')) links.push({ id: 'student-attendance', icon: 'fa-calendar-check', text: 'Attendance' });
+        if (hasProPermission('manageSettings')) links.push({ id: 'upload-settings', icon: 'fa-upload', text: 'Settings' });
+        // Always available for Pro
+        links.push({ id: 'mark-entry', icon: 'fa-edit', text: 'Enter Marks' });
+        links.push({ id: 'profile-settings', icon: 'fa-user-cog', text: 'Profile Settings' });
     } else {
         links = [
             { id: 'mark-entry', icon: 'fa-edit', text: 'Enter Marks' },
@@ -762,6 +969,7 @@ function buildSidebar() {
             links.splice(2, 0, { id: 'student-attendance', icon: 'fa-calendar-check', text: 'Student Attendance' });
         }
     }
+
     links.forEach(link => {
         if (link.isGroup) {
             const grp = document.createElement('div');
@@ -791,6 +999,7 @@ function buildSidebar() {
             nav.appendChild(a);
         }
     });
+
     if (state.currentUser.impersonating) {
         const b = document.createElement('a');
         b.href = '#'; b.className = 'flex items-center gap-3 px-6 py-3 mt-4 text-yellow-100 bg-yellow-600 mx-2 rounded cursor-pointer';
@@ -806,6 +1015,10 @@ function toggleNavGroup(id) {
     else { c.classList.add('hidden'); c.classList.remove('flex'); i.style.transform = 'rotate(0deg)'; }
 }
 function navigate(pageId) {
+    if (!canAccessPage(pageId)) {
+        showToast('🔒 तपाईंलाई यो पेजमा पहुँच गर्ने अनुमति छैन।', 'error');
+        return;
+    }
     currentPageId = pageId;
     try { sessionStorage.setItem('rss_current_page_v1', pageId); } catch (e) {}
     closeSidebarOnMobile();
@@ -829,7 +1042,7 @@ function navigate(pageId) {
     const content = document.getElementById('content-area');
     content.innerHTML = '<div class="flex justify-center items-center h-full text-blue-500"><i class="fas fa-spinner fa-spin text-3xl"></i></div>';
     const titles = {
-        'manage-students': state.currentUser.role === 'admin' ? 'Student Management' : 'My Class Students',
+        'manage-students': state.currentUser.role === 'admin' ? 'Student Management' : (isProUser() ? 'Manage Students (Pro)' : 'My Class Students'),
         'manage-teachers': 'Teacher Management', 'admin-teacher-view': 'Teacher Impersonation',
         'manage-academic': 'Classes & Subjects', 'term-management': 'Term Management',
         'subject-management': 'Subject Management', 'exam-process': 'Exam Process',
@@ -858,6 +1071,51 @@ function closeSidebarOnMobile() {
         if (!s.classList.contains('-translate-x-full')) { s.classList.add('-translate-x-full'); o.classList.add('hidden'); }
     }
 }
+
+// ============================================================
+// SESSION SWITCHER
+// ============================================================
+function injectSessionSwitcherInHeader() {
+    const headerRight = document.querySelector('#main-app header > div:last-child');
+    if (!headerRight) return;
+    const old = document.getElementById('session-switcher-wrapper');
+    if (old) old.remove();
+    const wrapper = document.createElement('div');
+    wrapper.id = 'session-switcher-wrapper';
+    wrapper.className = 'hidden sm:flex items-center';
+    wrapper.innerHTML = renderSessionSwitcher();
+    headerRight.insertBefore(wrapper, headerRight.firstChild);
+}
+function renderSessionSwitcher() {
+    const years = getSessionYears();
+    const active = state.activeSession || '2083';
+    let opts = years.map(y => '<option value="' + y + '"' + (y === active ? ' selected' : '') + '>' + y + ' B.S.</option>').join('');
+    if (!years.includes(active)) opts = '<option value="' + active + '" selected>' + active + ' B.S.</option>' + opts;
+    return '<div class="flex items-center gap-1 bg-blue-50 border border-blue-200 rounded-lg px-2 py-1"><i class="fas fa-calendar-alt text-blue-600 text-xs"></i><select id="session-switcher" onchange="handleSessionSwitch(this.value)" class="bg-transparent text-xs font-bold text-blue-900 cursor-pointer">' + opts + '</select>' + (isAdmin() ? '<button onclick="promptAddNewSession()" class="text-blue-600 hover:text-blue-800 p-1" title="Add Session"><i class="fas fa-plus-circle text-xs"></i></button>' : '') + '</div>';
+}
+window.handleSessionSwitch = function(year) {
+    if (year === state.activeSession) return;
+    const session = ensureSessionExists(year);
+    if (session.students.length === 0) showToast('New session ' + year + ' is empty.', 'info');
+    switchSession(year);
+};
+window.promptAddNewSession = function() {
+    if (!isAdmin()) { showToast('Admin only', 'error'); return; }
+    const input = prompt("Enter new session year (e.g. 2084):", String(parseInt(state.activeSession || '2083') + 1));
+    if (!input) return;
+    const year = input.trim();
+    if (!/^\d{4}$/.test(year)) { showToast('Enter valid 4-digit year', 'error'); return; }
+    if (state.sessions[year]) { showToast('Session exists. Switching...', 'warning'); handleSessionSwitch(year); return; }
+    ensureSessionExists(year); saveState(true, 'meta');
+    showToast('✅ Session ' + year + ' created!', 'success');
+    handleSessionSwitch(year);
+};
+window.toggleCtPermissions = function(show) {
+    var box = document.getElementById('ct-permissions-box');
+    if (!box) return;
+    if (show) box.classList.remove('hidden');
+    else box.classList.add('hidden');
+};
 
 // ============================================================
 // NUMBER TO WORDS + SIGNATURE BLOCK
@@ -908,7 +1166,15 @@ function getGradeInfo(percentage, className) {
 }
 function initDummyData() {
     if (state.teachers.length === 0) {
-        state.teachers.push({ id: 'T1', username: 'cha000', password: '9841000000', fullName: 'Chandra Shekhar Kasula', contact: '9841000000', email: 'kasulachandrashekhar@gmail.com', assignments: [{ className: 'Class 10', subject: 'Comp. Math' }, { className: 'Class 10', subject: 'Comp. Science' }], classTeacherOf: ['Class 10'], studentPermissions: { add: true, edit: true, delete: true } });
+        state.teachers.push({
+            id: 'T1', username: 'cha000', password: '9841000000',
+            fullName: 'Chandra Shekhar Kasula', contact: '9841000000', email: 'kasulachandrashekhar@gmail.com',
+            assignments: [{ className: 'Class 10', subject: 'Comp. Math' }, { className: 'Class 10', subject: 'Comp. Science' }],
+            classTeacherOf: ['Class 10'],
+            studentPermissions: { add: true, edit: true, delete: true },
+            isPro: false,
+            proPermissions: {}
+        });
     }
 }
 
@@ -933,18 +1199,27 @@ function hidePublicResultPortal() {
 }
 function loadPublicSymbols() {
     var cls = document.getElementById('pub-class').value;
+    var term = document.getElementById('pub-term').value;
     var sel = document.getElementById('pub-symbol');
     if (!cls) { sel.innerHTML = '<option value="">-- छान्नुहोस् --</option>'; return; }
-    var list = getStudents().filter(s => s.className === cls && s.symbolNo);
+    if (!term) { sel.innerHTML = '<option value="">-- पहिले परीक्षा छान्नुहोस् --</option>'; return; }
+    var list = getStudents().filter(s => s.className === cls && ((s.symbolNos && s.symbolNos[term]) || s.symbolNo));
     if (!list.length) { sel.innerHTML = '<option value="">-- भेटिएन --</option>'; return; }
-    list.sort((a, b) => (a.symbolNo || '').localeCompare(b.symbolNo || ''));
-    sel.innerHTML = '<option value="">-- छान्नुहोस् --</option>' + list.map(s => '<option value="' + s.symbolNo + '">' + s.symbolNo + ' - ' + s.name + '</option>').join('');
+    list.sort(function(a, b) {
+        var aS = (a.symbolNos && a.symbolNos[term]) || a.symbolNo || '';
+        var bS = (b.symbolNos && b.symbolNos[term]) || b.symbolNo || '';
+        return aS.localeCompare(bS);
+    });
+    sel.innerHTML = '<option value="">-- छान्नुहोस् --</option>' + list.map(function(s) {
+        var sym = (s.symbolNos && s.symbolNos[term]) || s.symbolNo || '';
+        return '<option value="' + sym + '">' + sym + ' - ' + s.name + '</option>';
+    }).join('');
 }
 async function searchPublicResult() {
     var term = document.getElementById('pub-term').value;
     var cls = document.getElementById('pub-class').value;
     var symbol = (document.getElementById('pub-symbol').value || '').trim().toUpperCase();
-    var dob = (document.getElementById('pub-dob').value || '').trim();
+    var dob = window.normalizeDOB((document.getElementById('pub-dob').value || '').trim());
     var showAdmit = document.getElementById('pub-show-admit').checked;
     var showGrade = document.getElementById('pub-show-grade').checked;
     var area = document.getElementById('pub-result-area');
@@ -952,9 +1227,13 @@ async function searchPublicResult() {
     if (!showAdmit && !showGrade) { showToast('कम्तीमा एउटा छान्नुहोस्।', 'error'); return; }
     if (!isTermPublished(term)) { area.innerHTML = '<div class="bg-amber-50 border-2 border-amber-200 rounded-xl p-6 text-center"><i class="fas fa-eye-slash text-amber-500 text-3xl mb-3"></i><h3 class="text-lg font-bold text-amber-700">नतिजा प्रकाशित छैन</h3></div>'; return; }
     if (window.pullLatestFromCloud) { try { await window.pullLatestFromCloud(true); } catch (e) {} }
-    var stu = getStudents().find(s => s.className === cls && (s.symbolNo || '').toUpperCase() === symbol);
+    var stu = getStudents().find(function(s) {
+        var sym = (s.symbolNos && s.symbolNos[term]) || s.symbolNo || '';
+        return s.className === cls && sym.toUpperCase() === symbol;
+    });
     if (!stu) { area.innerHTML = '<div class="bg-red-50 border-2 border-red-200 rounded-xl p-6 text-center"><i class="fas fa-exclamation-circle text-red-500 text-3xl mb-3"></i><h3 class="text-lg font-bold text-red-700">विद्यार्थी भेटिएन</h3></div>'; return; }
-    if ((stu.dob || '').trim() && (stu.dob || '').trim() !== dob) { area.innerHTML = '<div class="bg-red-50 border-2 border-red-200 rounded-xl p-6 text-center"><i class="fas fa-lock text-red-500 text-3xl mb-3"></i><h3 class="text-lg font-bold text-red-700">जन्म मिति मिलेन</h3></div>'; return; }
+    var stuDob = window.normalizeDOB((stu.dob || '').trim());
+    if (stuDob && stuDob !== dob) { area.innerHTML = '<div class="bg-red-50 border-2 border-red-200 rounded-xl p-6 text-center"><i class="fas fa-lock text-red-500 text-3xl mb-3"></i><h3 class="text-lg font-bold text-red-700">जन्म मिति मिलेन</h3></div>'; return; }
     area.innerHTML = '<div class="bg-white rounded-xl border p-12 text-center"><i class="fas fa-spinner fa-spin text-blue-600 text-3xl"></i></div>';
     setTimeout(function() {
         area.innerHTML = '';
@@ -993,7 +1272,8 @@ function renderPublicGradeSheet(student, term, cls) {
     });
     var finalGPA = (hasNG || valid === 0) ? '0.00' : (totalGPA / valid).toFixed(2);
     var finalStatus = (hasNG || valid === 0) ? 'NG' : 'PASS';
-    wrap.innerHTML = '<div class="bg-white rounded-xl border-2 border-blue-900 p-2 mb-4 no-print"><div class="flex justify-between items-center p-2"><h3 class="font-bold text-blue-900"><i class="fas fa-file-alt mr-2"></i>Grade Sheet</h3><button onclick="window.print()" class="bg-blue-900 text-white px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2"><i class="fas fa-print"></i> Print</button></div></div><div class="gradesheet-a4 bg-white" style="width:21cm;min-height:29.7cm;padding:1.5cm;margin:0 auto;box-shadow:0 2px 10px rgba(0,0,0,0.1);font-family:\'Times New Roman\',serif;color:#000;"><div style="display:flex;align-items:center;justify-content:space-between;border-bottom:3px double #1e3a8a;padding-bottom:12px;margin-bottom:16px;"><div style="width:90px;text-align:center;">' + logoImg + '</div><div style="text-align:center;flex:1;"><h1 style="font-size:24px;font-weight:bold;margin:0;color:#1e3a8a;text-transform:uppercase;">' + sName + '</h1><p style="font-size:13px;margin:4px 0;">' + sAddress + '</p><h2 style="font-size:15px;font-weight:bold;margin:6px 0 0 0;color:#1e3a8a;">' + examTitle + '</h2><h3 style="font-size:16px;font-weight:bold;margin:8px 0 0 0;text-decoration:underline;">GRADE SHEET</h3></div><div style="width:90px;"></div></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;font-size:13px;padding:10px 0;border-bottom:1px solid #e5e7eb;"><div><strong>Name:</strong> ' + student.name + '</div><div style="text-align:right;"><strong>Symbol No:</strong> ' + (student.symbolNo || '-') + '</div><div><strong>Class:</strong> ' + student.className + '</div><div style="text-align:right;"><strong>DOB BS:</strong> ' + (student.dob || '-') + '</div><div><strong>Student ID:</strong> ' + student.id + '</div><div style="text-align:right;"><strong>Gender:</strong> ' + (student.gender || '-') + '</div></div><table class="gradesheet-table"><thead><tr><th rowspan="2">S.N</th><th rowspan="2">Code</th><th rowspan="2" style="text-align:left;">Subjects</th><th rowspan="2">Cr.Hr</th><th colspan="2">Grade</th><th rowspan="2">Final</th><th rowspan="2">GP</th><th rowspan="2">Remarks</th></tr><tr><th>Theory</th><th>Internal</th></tr></thead><tbody>' + rows + '</tbody><tfoot><tr style="background:#f0f4ff;"><td colspan="7" style="text-align:right;">GPA:</td><td colspan="2" style="text-align:center;color:#1e3a8a;">' + finalGPA + '</td></tr><tr style="background:#f0f4ff;"><td colspan="7" style="text-align:right;">Final Grade:</td><td colspan="2" style="text-align:center;color:' + (finalStatus === 'NG' ? '#dc2626' : '#16a34a') + ';">' + finalStatus + '</td></tr></tfoot></table><div style="font-size:10px;border:1px solid #1e3a8a;padding:8px;background:#f8faff;margin-bottom:24px;"><strong>Grading Scale:</strong> A+ (90-100) | A (80-89) | B+ (70-79) | B (60-69) | C+ (50-59) | C (40-49) | D (35-39) | NG (Below 35)</div>' + buildSignatureBlock(imgs, 40) + '</div>';
+    var displaySymbol = (student.symbolNos && student.symbolNos[term]) || student.symbolNo || '-';
+    wrap.innerHTML = '<div class="bg-white rounded-xl border-2 border-blue-900 p-2 mb-4 no-print"><div class="flex justify-between items-center p-2"><h3 class="font-bold text-blue-900"><i class="fas fa-file-alt mr-2"></i>Grade Sheet</h3><button onclick="window.print()" class="bg-blue-900 text-white px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2"><i class="fas fa-print"></i> Print</button></div></div><div class="gradesheet-a4 bg-white" style="width:21cm;min-height:29.7cm;padding:1.5cm;margin:0 auto;box-shadow:0 2px 10px rgba(0,0,0,0.1);font-family:\'Times New Roman\',serif;color:#000;"><div style="display:flex;align-items:center;justify-content:space-between;border-bottom:3px double #1e3a8a;padding-bottom:12px;margin-bottom:16px;"><div style="width:90px;text-align:center;">' + logoImg + '</div><div style="text-align:center;flex:1;"><h1 style="font-size:24px;font-weight:bold;margin:0;color:#1e3a8a;text-transform:uppercase;">' + sName + '</h1><p style="font-size:13px;margin:4px 0;">' + sAddress + '</p><h2 style="font-size:15px;font-weight:bold;margin:6px 0 0 0;color:#1e3a8a;">' + examTitle + '</h2><h3 style="font-size:16px;font-weight:bold;margin:8px 0 0 0;text-decoration:underline;">GRADE SHEET</h3></div><div style="width:90px;"></div></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;font-size:13px;padding:10px 0;border-bottom:1px solid #e5e7eb;"><div><strong>Name:</strong> ' + student.name + '</div><div style="text-align:right;"><strong>Symbol No:</strong> ' + displaySymbol + '</div><div><strong>Class:</strong> ' + student.className + '</div><div style="text-align:right;"><strong>DOB BS:</strong> ' + (student.dob || '-') + '</div><div><strong>Student ID:</strong> ' + student.id + '</div><div style="text-align:right;"><strong>Gender:</strong> ' + (student.gender || '-') + '</div></div><table class="gradesheet-table"><thead><tr><th rowspan="2">S.N</th><th rowspan="2">Code</th><th rowspan="2" style="text-align:left;">Subjects</th><th rowspan="2">Cr.Hr</th><th colspan="2">Grade</th><th rowspan="2">Final</th><th rowspan="2">GP</th><th rowspan="2">Remarks</th></tr><tr><th>Theory</th><th>Internal</th></tr></thead><tbody>' + rows + '</tbody><tfoot><tr style="background:#f0f4ff;"><td colspan="7" style="text-align:right;">GPA:</td><td colspan="2" style="text-align:center;color:#1e3a8a;">' + finalGPA + '</td></tr><tr style="background:#f0f4ff;"><td colspan="7" style="text-align:right;">Final Grade:</td><td colspan="2" style="text-align:center;color:' + (finalStatus === 'NG' ? '#dc2626' : '#16a34a') + ';">' + finalStatus + '</td></tr></tfoot></table><div style="font-size:10px;border:1px solid #1e3a8a;padding:8px;background:#f8faff;margin-bottom:24px;"><strong>Grading Scale:</strong> A+ (90-100) | A (80-89) | B+ (70-79) | B (60-69) | C+ (50-59) | C (40-49) | D (35-39) | NG (Below 35)</div>' + buildSignatureBlock(imgs, 40) + '</div>';
     area.appendChild(wrap);
 }
 function renderPublicAdmitCard(student, term, cls) {
@@ -1009,7 +1289,7 @@ function renderPublicAdmitCard(student, term, cls) {
     var times = state.examSettings.routineTimes || {};
     var defT = state.examSettings.defaultRoutineTime || '11:00 AM - 2:00 PM';
     var rows = routine.length ? routine.map(function(r, i) { return '<tr><td style="border:1px solid #1e3a8a;padding:4px;text-align:center;">' + (i+1) + '</td><td style="border:1px solid #1e3a8a;padding:4px;text-align:center;">' + formatDateBS(r.date) + '</td><td style="border:1px solid #1e3a8a;padding:4px;">' + (r.subject || '-') + '</td><td style="border:1px solid #1e3a8a;padding:4px;text-align:center;">' + (times[r.date] || defT) + '</td></tr>'; }).join('') : '<tr><td colspan="4" style="border:1px solid #1e3a8a;padding:8px;text-align:center;">No routine.</td></tr>';
-    var sym = student.symbolNo || '';
+    var sym = (student.symbolNos && student.symbolNos[term]) || student.symbolNo || '';
     var m = sym.match(/\d+/); var symW = m ? numToWords(parseInt(m[0], 10)) : '';
     var al = sym.match(/[a-zA-Z]+$/); if (al) symW += ' - ' + al[0].toUpperCase();
     box.innerHTML = '<div class="bg-white rounded-xl border-2 border-blue-900 p-2 mb-4 no-print"><div class="flex justify-between items-center p-2"><h3 class="font-bold text-blue-900"><i class="fas fa-id-card mr-2"></i>Admit Card</h3><button onclick="window.print()" class="bg-blue-900 text-white px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2"><i class="fas fa-print"></i> Print</button></div></div><div style="width:21cm;min-height:29.7cm;padding:1.5cm;margin:0 auto;background:white;box-shadow:0 2px 10px rgba(0,0,0,0.1);font-family:\'Times New Roman\',serif;"><div style="border:2px solid #1e3a8a;padding:18px;min-height:13.5cm;"><div style="display:flex;align-items:center;justify-content:space-between;border-bottom:2px solid #1e3a8a;padding-bottom:8px;margin-bottom:12px;"><div style="width:70px;">' + logoImg + '</div><div style="text-align:center;flex:1;"><h1 style="font-size:18px;font-weight:bold;margin:0;color:#1e3a8a;text-transform:uppercase;">' + sName + '</h1><p style="font-size:11px;margin:3px 0;">' + sAddress + '</p><h2 style="font-size:13px;font-weight:bold;margin:5px 0 0 0;color:#1e3a8a;">' + examTitle + '</h2></div><div style="width:70px;"></div></div><div style="text-align:center;margin-bottom:10px;"><span style="background:#1e3a8a;color:white;padding:3px 16px;font-size:12px;font-weight:bold;border-radius:3px;">प्रवेश पत्र / ADMIT CARD</span></div><table style="width:100%;border-collapse:collapse;margin-bottom:12px;font-size:12px;"><tr><td style="border:1px solid #93c5fd;padding:4px 8px;background:#eff6ff;width:90px;">Name:</td><td style="border:1px solid #93c5fd;padding:4px 8px;font-weight:bold;">' + student.name + '</td><td style="border:1px solid #93c5fd;padding:4px 8px;background:#eff6ff;width:70px;">Class:</td><td style="border:1px solid #93c5fd;padding:4px 8px;font-weight:bold;">' + student.className + '</td></tr><tr><td style="border:1px solid #93c5fd;padding:4px 8px;background:#eff6ff;">Symbol:</td><td style="border:1px solid #93c5fd;padding:4px 8px;font-weight:bold;color:#1e3a8a;" colspan="3">' + sym + '</td></tr><tr><td style="border:1px solid #93c5fd;padding:4px 8px;background:#eff6ff;">In Words:</td><td style="border:1px solid #93c5fd;padding:4px 8px;font-weight:bold;" colspan="3">' + symW + '</td></tr></table><div style="text-align:center;font-weight:bold;font-size:12px;text-decoration:underline;margin-bottom:6px;color:#1e3a8a;">EXAM ROUTINE</div><table style="width:100%;border-collapse:collapse;font-size:11px;margin-bottom:14px;"><thead><tr style="background:#1e3a8a;color:white;"><th style="border:1px solid #1e3a8a;padding:4px;width:35px;">S.N</th><th style="border:1px solid #1e3a8a;padding:4px;width:80px;">Date</th><th style="border:1px solid #1e3a8a;padding:4px;text-align:left;">Subject</th><th style="border:1px solid #1e3a8a;padding:4px;width:110px;">Time</th></tr></thead><tbody>' + rows + '</tbody></table>' + buildSignatureBlock(imgs, 35) + '</div></div>';
@@ -1019,30 +1299,35 @@ window.showPublicResultPortal = showPublicResultPortal;
 window.hidePublicResultPortal = hidePublicResultPortal;
 window.loadPublicSymbols = loadPublicSymbols;
 window.searchPublicResult = searchPublicResult;
+</script>
 
+
+<script>
 // ============================================================
-// STUDENT MANAGEMENT (with Class Teacher Permissions)
+// STUDENT MANAGEMENT (with DOB Normalize + Pro Permissions)
 // ============================================================
 var editingStudentId = null, confirmDeleteStudentId = null;
 window.selectedStudentIds = new Set();
 
 function renderManageStudents(container) {
-    const isAdmin = state.currentUser.role === 'admin';
+    const isAdm = isAdmin();
+    const isPro = isProUser();
     const editable = getEditableClasses();
-    if (editable.length === 0) {
+    if (editable.length === 0 && !isAdm && !isPro) {
         container.innerHTML = '<div class="bg-white p-6 rounded-xl shadow-sm border text-center fade-in mt-6 max-w-lg mx-auto"><i class="fas fa-user-lock text-5xl text-gray-300 mb-4"></i><h3 class="text-lg font-bold text-gray-700">No Class Teacher Role</h3><p class="text-sm text-gray-500 mt-2">Contact Admin.</p></div>';
         return;
     }
     const ctPerms = getCtPermissions();
-    const canAdd = isAdmin || ctPerms.add;
-    const canEdit = isAdmin || ctPerms.edit;
-    const canDelete = isAdmin || ctPerms.delete;
+    const canAdd = isAdm || (isPro && hasProPermission('addStudents')) || (!isPro && ctPerms.add);
+    const canEdit = isAdm || (isPro && hasProPermission('editStudents')) || (!isPro && ctPerms.edit);
+    const canDelete = isAdm || (isPro && hasProPermission('deleteStudents')) || (!isPro && ctPerms.delete);
     window.__ctPerms = { add: canAdd, edit: canEdit, delete: canDelete };
-    const classOpts = editable.map(c => '<option value="' + c + '">' + c + '</option>').join('');
+    const listClasses = isAdm || isPro ? state.classes : editable;
+    const classOpts = listClasses.map(c => '<option value="' + c + '">' + c + '</option>').join('');
     const sessionYear = state.activeSession || '2083';
-    var permBanner = '';
-    if (!isAdmin) {
-        permBanner = '<div class="bg-amber-50 border-2 border-amber-200 rounded-lg p-2 mb-3 flex flex-wrap items-center gap-2 text-xs"><strong class="text-amber-800"><i class="fas fa-key mr-1"></i>Your Permissions:</strong>' +
+    var roleBanner = '';
+    if (!isAdm) {
+        roleBanner = '<div class="bg-amber-50 border-2 border-amber-200 rounded-lg p-2 mb-3 flex flex-wrap items-center gap-2 text-xs"><strong class="text-amber-800"><i class="fas fa-key mr-1"></i>' + (isPro ? 'Pro User Permissions:' : 'Class Teacher Permissions:') + '</strong>' +
             (canAdd ? '<span class="bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded font-bold">+ADD</span>' : '<span class="bg-gray-200 text-gray-500 px-2 py-0.5 rounded line-through">ADD</span>') +
             (canEdit ? '<span class="bg-blue-100 text-blue-700 px-2 py-0.5 rounded font-bold">EDIT</span>' : '<span class="bg-gray-200 text-gray-500 px-2 py-0.5 rounded line-through">EDIT</span>') +
             (canDelete ? '<span class="bg-red-100 text-red-700 px-2 py-0.5 rounded font-bold">DELETE</span>' : '<span class="bg-gray-200 text-gray-500 px-2 py-0.5 rounded line-through">DELETE</span>') +
@@ -1050,12 +1335,12 @@ function renderManageStudents(container) {
     }
     container.innerHTML =
     '<div class="fade-in">' +
-    '<div class="bg-blue-50 border-2 border-blue-200 rounded-lg p-3 mb-4 flex items-center gap-2 flex-wrap"><i class="fas fa-calendar-alt text-blue-600"></i><span class="text-sm font-bold text-blue-900">Session: ' + sessionYear + ' B.S.</span>' + (!isAdmin ? '<span class="text-xs bg-amber-100 text-amber-800 px-2 py-0.5 rounded border border-amber-200 font-semibold">Class Teacher Mode</span>' : '') + '</div>' +
-    permBanner +
+    '<div class="bg-blue-50 border-2 border-blue-200 rounded-lg p-3 mb-4 flex items-center gap-2 flex-wrap"><i class="fas fa-calendar-alt text-blue-600"></i><span class="text-sm font-bold text-blue-900">Session: ' + sessionYear + ' B.S.</span>' + (!isAdm ? '<span class="text-xs bg-amber-100 text-amber-800 px-2 py-0.5 rounded border border-amber-200 font-semibold">' + (isPro ? 'Pro User Mode' : 'Class Teacher Mode') + '</span>' : '') + '</div>' +
+    roleBanner +
     '<div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">' +
         '<div class="bg-white p-4 rounded-xl shadow-sm border">' +
             '<h3 class="text-base font-semibold text-gray-800 mb-2">Upload Excel/CSV</h3>' +
-            '<div class="bg-gray-50 border rounded p-2 mb-3 text-[10px] text-gray-600 leading-relaxed"><strong>Columns:</strong><br>Student Id*, FullName*, Gender, Father Name, Mother Name, CurrentClass*, Section, Year(BS), Permanent Address, DOB, Guardian Contact Number</div>' +
+            '<div class="bg-gray-50 border rounded p-2 mb-3 text-[10px] text-gray-600 leading-relaxed"><strong>Columns:</strong><br>Student Id*, FullName*, Gender, Father Name, Mother Name, CurrentClass*, Section, Year(BS), Permanent Address, DOB, Guardian Contact Number<br><span class="text-emerald-700 font-semibold">✓ DOB auto-normalize: 2065-1-1 → 2065-01-01</span></div>' +
             '<div class="border-2 border-dashed ' + (canAdd ? 'border-gray-300 bg-gray-50 hover:bg-gray-100 cursor-pointer' : 'border-gray-200 bg-gray-100 opacity-60 cursor-not-allowed') + ' rounded-xl p-4 text-center" ' + (canAdd ? 'onclick="document.getElementById(\'excel-file\').click()"' : '') + '><i class="fas fa-file-excel text-3xl text-green-600 mb-2"></i><input type="file" id="excel-file" accept=".xlsx,.xls,.csv" class="hidden" onchange="handleExcelUpload(event)" ' + (canAdd ? '' : 'disabled') + '><button class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm w-full ' + (canAdd ? '' : 'opacity-50 cursor-not-allowed') + '" ' + (canAdd ? '' : 'disabled') + '>Browse File</button></div>' +
             '<button type="button" onclick="downloadStudentExcelTemplate()" class="mt-2 text-xs text-blue-600 font-medium flex items-center justify-center gap-1 w-full py-1.5 border border-blue-200 rounded-lg bg-blue-50/50"><i class="fas fa-download"></i> Download Template</button>' +
         '</div>' +
@@ -1070,7 +1355,7 @@ function renderManageStudents(container) {
                 '<div><label class="block text-xs font-medium text-gray-700 mb-1">Year (BS)</label><input type="text" id="add-s-year" value="' + sessionYear + '" readonly class="w-full px-3 py-2 border rounded-lg text-sm bg-gray-100"></div>' +
                 '<div><label class="block text-xs font-medium text-gray-700 mb-1">Father Name</label><input type="text" id="add-s-father" class="w-full px-3 py-2 border rounded-lg text-sm"></div>' +
                 '<div><label class="block text-xs font-medium text-gray-700 mb-1">Mother Name</label><input type="text" id="add-s-mother" class="w-full px-3 py-2 border rounded-lg text-sm"></div>' +
-                '<div><label class="block text-xs font-medium text-gray-700 mb-1">DOB</label><input type="text" id="add-s-dob" placeholder="2071-02-12" class="w-full px-3 py-2 border rounded-lg text-sm"></div>' +
+                '<div><label class="block text-xs font-medium text-gray-700 mb-1">DOB (auto-normalize)</label><input type="text" id="add-s-dob" placeholder="2065-1-1 → 2065-01-01" class="w-full px-3 py-2 border rounded-lg text-sm"></div>' +
                 '<div class="sm:col-span-2"><label class="block text-xs font-medium text-gray-700 mb-1">Permanent Address</label><input type="text" id="add-s-address" class="w-full px-3 py-2 border rounded-lg text-sm"></div>' +
                 '<div><label class="block text-xs font-medium text-gray-700 mb-1">Guardian Contact</label><input type="tel" id="add-s-contact" class="w-full px-3 py-2 border rounded-lg text-sm"></div>' +
                 '<div class="sm:col-span-2 lg:col-span-3"><button type="submit" class="bg-green-600 text-white font-medium py-2 px-6 rounded-lg text-sm flex items-center gap-2"><i class="fas fa-user-plus"></i> Add Student</button></div>' +
@@ -1085,7 +1370,7 @@ function renderManageStudents(container) {
                 (canDelete ? '<button onclick="openBulkDeleteModal()" class="bg-red-100 text-red-700 hover:bg-red-200 border border-red-200 px-3 py-1 rounded text-xs font-bold flex items-center gap-1"><i class="fas fa-trash-alt"></i> Bulk Delete</button>' +
                 '<button onclick="deleteAllStudents()" class="bg-red-600 text-white hover:bg-red-700 px-3 py-1 rounded text-xs font-bold flex items-center gap-1"><i class="fas fa-broom"></i> Delete ALL</button>' : '<span class="text-xs text-gray-400 italic"><i class="fas fa-lock"></i> Delete disabled</span>') +
             '</div>' +
-            '<div class="flex gap-2"><input type="text" id="search-student" onkeyup="updateStudentTable()" placeholder="Search..." class="px-3 py-2 border rounded-lg text-sm"><select id="filter-class" onchange="updateStudentTable()" class="px-3 py-2 border rounded-lg text-sm bg-white"><option value="ALL">All My Classes</option>' + classOpts + '</select></div>' +
+            '<div class="flex gap-2"><input type="text" id="search-student" onkeyup="updateStudentTable()" placeholder="Search..." class="px-3 py-2 border rounded-lg text-sm"><select id="filter-class" onchange="updateStudentTable()" class="px-3 py-2 border rounded-lg text-sm bg-white"><option value="ALL">All Classes</option>' + classOpts + '</select></div>' +
         '</div>' +
         '<div class="overflow-auto custom-scrollbar flex-1"><table class="w-full text-sm text-left whitespace-nowrap">' +
             '<thead class="text-xs text-gray-700 uppercase bg-gray-100 sticky top-0 z-10"><tr>' +
@@ -1099,7 +1384,8 @@ function renderManageStudents(container) {
 
 function downloadStudentExcelTemplate() {
     var data = [
-        { "Student Id": "290050003750180", "FullName": "Paldan Tamang", "Gender": "Male", "Father Name": "Chhong Gombo Tamang", "Mother Name": "Kipa Tamang", "CurrentClass": "9", "Section": "A", "Year (BS)": "2083", "Permanent Address": "Gosaikunda-6, Rasuwa", "DOB": "2071-02-12", "Guardian Contact Number": "9862425646" }
+        { "Student Id": "290050003750180", "FullName": "Paldan Tamang", "Gender": "Male", "Father Name": "Chhong Gombo Tamang", "Mother Name": "Kipa Tamang", "CurrentClass": "9", "Section": "A", "Year (BS)": "2083", "Permanent Address": "Gosaikunda-6, Rasuwa", "DOB": "2065-1-1", "Guardian Contact Number": "9862425646" },
+        { "Student Id": "290050006820000", "FullName": "Aakash Lopchan", "Gender": "Male", "Father Name": "Lama Karma Lopchan", "Mother Name": "Suki Tamang", "CurrentClass": "1", "Section": "A", "Year (BS)": "2083", "Permanent Address": "Naukunda-1, Rasuwa", "DOB": "2077-05-23", "Guardian Contact Number": "9742674691" }
     ];
     var ws = XLSX.utils.json_to_sheet(data);
     var wb = XLSX.utils.book_new();
@@ -1110,7 +1396,7 @@ function downloadStudentExcelTemplate() {
 window.downloadStudentExcelTemplate = downloadStudentExcelTemplate;
 
 function handleExcelUpload(event) {
-    if (state.currentUser.role !== 'admin' && !getCtPermissions().add) { showToast('🔒 Add permission छैन', 'error'); return; }
+    if (!isAdmin() && !getCtPermissions().add) { showToast('🔒 Add permission छैन', 'error'); return; }
     var file = event.target.files[0];
     if (!file) return;
     var reader = new FileReader();
@@ -1124,7 +1410,7 @@ function handleExcelUpload(event) {
             var session = getActiveSessionData();
             var sessionYear = state.activeSession || '2083';
             var editable = getEditableClasses();
-            var added = 0, skipped = 0, newClasses = 0;
+            var added = 0, skipped = 0, newClasses = 0, normalizedCount = 0;
             json.forEach(function(row) {
                 var id = (row['Student Id'] || row['StudentID'] || '').toString().trim();
                 var name = (row['FullName'] || row['Full Name'] || row['Name'] || '').toString().trim();
@@ -1132,15 +1418,34 @@ function handleExcelUpload(event) {
                 if (!id || !name || !cls) { skipped++; return; }
                 var isNum = !isNaN(cls) && !isNaN(parseFloat(cls));
                 var finalCls = isNum ? 'Class ' + cls : cls;
-                if (state.currentUser.role === 'teacher' && editable.indexOf(finalCls) === -1) { skipped++; return; }
+                if (state.currentUser.role === 'teacher' && !isProUser() && editable.indexOf(finalCls) === -1) { skipped++; return; }
+                if (state.currentUser.role === 'teacher' && isProUser() && !hasProPermission('viewAllStudents') && editable.indexOf(finalCls) === -1) { skipped++; return; }
                 if (session.students.find(s => s.id === id)) { skipped++; return; }
-                session.students.push({ id: id, name: name, gender: (row['Gender'] || '').toString().trim(), fatherName: (row['Father Name'] || '').toString().trim(), motherName: (row['Mother Name'] || '').toString().trim(), className: finalCls, section: (row['Section'] || '').toString().trim(), year: (row['Year (BS)'] || row['Year'] || sessionYear).toString().trim(), address: (row['Permanent Address'] || row['Address'] || '').toString().trim(), dob: (row['DOB'] || '').toString().trim(), contact: (row['Guardian Contact Number'] || row['Contact'] || '').toString().trim() });
+                var rawDob = (row['DOB'] || '').toString().trim();
+                var normDob = window.normalizeDOB(rawDob);
+                if (rawDob && rawDob !== normDob) normalizedCount++;
+                session.students.push({
+                    id: id, name: name,
+                    gender: (row['Gender'] || '').toString().trim(),
+                    fatherName: (row['Father Name'] || '').toString().trim(),
+                    motherName: (row['Mother Name'] || '').toString().trim(),
+                    className: finalCls,
+                    section: (row['Section'] || '').toString().trim(),
+                    year: (row['Year (BS)'] || row['Year'] || sessionYear).toString().trim(),
+                    address: (row['Permanent Address'] || row['Address'] || '').toString().trim(),
+                    dob: normDob,
+                    contact: (row['Guardian Contact Number'] || row['Contact'] || '').toString().trim(),
+                    symbolNos: {}
+                });
                 added++;
                 if (state.classes.indexOf(finalCls) === -1) { state.classes.push(finalCls); newClasses++; }
             });
             if (newClasses > 0) { state.classes.sort(function(a, b) { return (parseInt(a.replace(/[^0-9]/g, ''), 10) || 999) - (parseInt(b.replace(/[^0-9]/g, ''), 10) || 999); }); saveState(true, 'meta'); }
             saveState(true, 'students');
-            showToast('Imported ' + added + ' students' + (skipped ? ' (' + skipped + ' skipped)' : ''), added > 0 ? 'success' : 'warning');
+            var msg = 'Imported ' + added + ' students';
+            if (normalizedCount > 0) msg += ' (✓ ' + normalizedCount + ' DOB normalized)';
+            if (skipped > 0) msg += ' (' + skipped + ' skipped)';
+            showToast(msg, added > 0 ? 'success' : 'warning');
             renderManageStudents(document.getElementById('content-area'));
         } catch (err) { console.error(err); showToast("Parse error", "error"); }
     };
@@ -1150,7 +1455,7 @@ window.handleExcelUpload = handleExcelUpload;
 
 async function handleAddStudent(e) {
     e.preventDefault();
-    if (state.currentUser.role !== 'admin' && !getCtPermissions().add) { showToast('🔒 Student add गर्ने अनुमति छैन।', 'error'); return; }
+    if (!isAdmin() && !getCtPermissions().add) { showToast('🔒 Student add गर्ने अनुमति छैन।', 'error'); return; }
     var session = getActiveSessionData();
     var sessionYear = state.activeSession || '2083';
     var id = document.getElementById('add-s-id').value.trim();
@@ -1161,14 +1466,17 @@ async function handleAddStudent(e) {
     var year = document.getElementById('add-s-year').value.trim();
     var father = document.getElementById('add-s-father').value.trim();
     var mother = document.getElementById('add-s-mother').value.trim();
-    var dob = document.getElementById('add-s-dob').value.trim();
+    var dobRaw = document.getElementById('add-s-dob').value.trim();
+    var dob = window.normalizeDOB(dobRaw);
     var addr = document.getElementById('add-s-address').value.trim();
     var contact = document.getElementById('add-s-contact').value.trim();
     if (!canEditStudentInClass(cls)) { showToast("Not allowed for this class", "error"); return; }
     if (session.students.find(s => s.id === id)) { showToast("Student ID exists!", "error"); return; }
-    session.students.unshift({ id: id, name: name, gender: gender, className: cls, section: section, year: year || sessionYear, fatherName: father, motherName: mother, dob: dob, address: addr, contact: contact });
+    session.students.unshift({ id: id, name: name, gender: gender, className: cls, section: section, year: year || sessionYear, fatherName: father, motherName: mother, dob: dob, address: addr, contact: contact, symbolNos: {} });
     await saveState(true, 'students');
-    showToast("Student added!", "success");
+    var msg = "Student added!";
+    if (dobRaw && dobRaw !== dob) msg += ' (DOB: ' + dob + ')';
+    showToast(msg, "success");
     document.getElementById('add-student-form').reset();
     document.getElementById('add-s-year').value = sessionYear;
     updateStudentTable();
@@ -1183,11 +1491,14 @@ function updateStudentTable() {
     var search = (document.getElementById('search-student')?.value || '').toLowerCase();
     var filterCls = document.getElementById('filter-class')?.value || 'ALL';
     var editable = getEditableClasses();
-    var canEdit = window.__ctPerms ? window.__ctPerms.edit : true;
-    var canDelete = window.__ctPerms ? window.__ctPerms.delete : true;
+    var isAdm = isAdmin();
+    var isPro = isProUser();
+    var canEdit = isAdm || (isPro && hasProPermission('editStudents')) || (!isPro && getCtPermissions().edit);
+    var canDelete = isAdm || (isPro && hasProPermission('deleteStudents')) || (!isPro && getCtPermissions().delete);
+    var canSeeAll = isAdm || (isPro && hasProPermission('viewAllStudents'));
     var list = session.students.filter(function(s) {
         var mS = (s.name || '').toLowerCase().indexOf(search) > -1 || (s.id || '').toLowerCase().indexOf(search) > -1;
-        var mC = filterCls === 'ALL' ? editable.indexOf(s.className) > -1 : s.className === filterCls;
+        var mC = filterCls === 'ALL' ? (canSeeAll || editable.indexOf(s.className) > -1) : s.className === filterCls;
         return mS && mC;
     });
     tbody.innerHTML = '';
@@ -1204,7 +1515,7 @@ function updateStudentTable() {
                 '<td class="px-2 py-2 border"><select id="edit-s-gender" class="w-20 px-1 py-1 border rounded text-xs"><option ' + (s.gender === 'Male' ? 'selected' : '') + '>Male</option><option ' + (s.gender === 'Female' ? 'selected' : '') + '>Female</option></select></td>' +
                 '<td class="px-2 py-2 border"><input id="edit-s-father" value="' + (s.fatherName || '') + '" class="w-32 px-1 py-1 border rounded text-xs"></td>' +
                 '<td class="px-2 py-2 border"><input id="edit-s-mother" value="' + (s.motherName || '') + '" class="w-32 px-1 py-1 border rounded text-xs"></td>' +
-                '<td class="px-2 py-2 border"><select id="edit-s-class" class="w-24 px-1 py-1 border rounded text-xs">' + getEditableClasses().map(function(c) { return '<option value="' + c + '"' + (s.className === c ? ' selected' : '') + '>' + c + '</option>'; }).join('') + '</select></td>' +
+                '<td class="px-2 py-2 border"><select id="edit-s-class" class="w-24 px-1 py-1 border rounded text-xs">' + (canSeeAll ? state.classes : getEditableClasses()).map(function(c) { return '<option value="' + c + '"' + (s.className === c ? ' selected' : '') + '>' + c + '</option>'; }).join('') + '</select></td>' +
                 '<td class="px-2 py-2 border"><input id="edit-s-section" value="' + (s.section || '') + '" class="w-16 px-1 py-1 border rounded text-xs"></td>' +
                 '<td class="px-2 py-2 border"><input value="' + (s.year || '') + '" readonly class="w-16 px-1 py-1 border rounded text-xs bg-gray-100"></td>' +
                 '<td class="px-2 py-2 border"><input id="edit-s-address" value="' + (s.address || '') + '" class="w-40 px-1 py-1 border rounded text-xs"></td>' +
@@ -1244,10 +1555,10 @@ function updateStudentTable() {
 }
 window.updateStudentTable = updateStudentTable;
 
-function startEditStudent(id) { if (state.currentUser.role !== 'admin' && !getCtPermissions().edit) { showToast('🔒 Edit permission छैन', 'error'); return; } editingStudentId = id; confirmDeleteStudentId = null; updateStudentTable(); }
+function startEditStudent(id) { if (!isAdmin() && !getCtPermissions().edit) { showToast('🔒 Edit permission छैन', 'error'); return; } editingStudentId = id; confirmDeleteStudentId = null; updateStudentTable(); }
 function cancelEditStudent() { editingStudentId = null; updateStudentTable(); }
 async function saveEditStudent(id) {
-    if (state.currentUser.role !== 'admin' && !getCtPermissions().edit) { showToast('🔒 Edit permission छैन', 'error'); return; }
+    if (!isAdmin() && !getCtPermissions().edit) { showToast('🔒 Edit permission छैन', 'error'); return; }
     var session = getActiveSessionData();
     var stu = session.students.find(s => s.id === id);
     if (!stu) return;
@@ -1259,7 +1570,7 @@ async function saveEditStudent(id) {
     stu.section = document.getElementById('edit-s-section').value.trim();
     stu.fatherName = document.getElementById('edit-s-father').value.trim();
     stu.motherName = document.getElementById('edit-s-mother').value.trim();
-    stu.dob = document.getElementById('edit-s-dob').value.trim();
+    stu.dob = window.normalizeDOB(document.getElementById('edit-s-dob').value.trim());
     stu.address = document.getElementById('edit-s-address').value.trim();
     stu.contact = document.getElementById('edit-s-contact').value.trim();
     await saveState(true, 'students');
@@ -1267,10 +1578,10 @@ async function saveEditStudent(id) {
     editingStudentId = null;
     updateStudentTable();
 }
-function startDeleteStudent(id) { if (state.currentUser.role !== 'admin' && !getCtPermissions().delete) { showToast('🔒 Delete permission छैन', 'error'); return; } confirmDeleteStudentId = id; editingStudentId = null; updateStudentTable(); }
+function startDeleteStudent(id) { if (!isAdmin() && !getCtPermissions().delete) { showToast('🔒 Delete permission छैन', 'error'); return; } confirmDeleteStudentId = id; editingStudentId = null; updateStudentTable(); }
 function cancelDeleteStudent() { confirmDeleteStudentId = null; updateStudentTable(); }
 async function executeDeleteStudent(id) {
-    if (state.currentUser.role !== 'admin' && !getCtPermissions().delete) { showToast('🔒 Delete permission छैन', 'error'); return; }
+    if (!isAdmin() && !getCtPermissions().delete) { showToast('🔒 Delete permission छैन', 'error'); return; }
     var session = getActiveSessionData();
     var stu = session.students.find(s => s.id === id);
     if (stu && !canEditStudentInClass(stu.className)) { showToast("Not allowed", "error"); return; }
@@ -1300,9 +1611,10 @@ window.toggleSelectAllStudents = function(masterCb) {
     var filterCls = document.getElementById('filter-class')?.value || 'ALL';
     var searchTerm = (document.getElementById('search-student')?.value || '').toLowerCase();
     var editable = getEditableClasses();
+    var canSeeAll = isAdmin() || (isProUser() && hasProPermission('viewAllStudents'));
     var visible = session.students.filter(function(s) {
         var mS = (s.name || '').toLowerCase().indexOf(searchTerm) > -1 || (s.id || '').toLowerCase().indexOf(searchTerm) > -1;
-        var mC = filterCls === 'ALL' ? editable.indexOf(s.className) > -1 : s.className === filterCls;
+        var mC = filterCls === 'ALL' ? (canSeeAll || editable.indexOf(s.className) > -1) : s.className === filterCls;
         return mS && mC;
     });
     if (masterCb.checked) visible.forEach(function(s) { window.selectedStudentIds.add(s.id); });
@@ -1319,10 +1631,11 @@ window.toggleStudentSelect = function(cb, id) {
     }
 };
 window.openBulkDeleteModal = function() {
-    if (state.currentUser.role !== 'admin' && !getCtPermissions().delete) { showToast('🔒 Delete permission छैन', 'error'); return; }
+    if (!isAdmin() && !getCtPermissions().delete) { showToast('🔒 Delete permission छैन', 'error'); return; }
     var session = getActiveSessionData();
     if (!session) return;
-    var editable = getEditableClasses();
+    var canSeeAll = isAdmin() || (isProUser() && hasProPermission('viewAllStudents'));
+    var editable = canSeeAll ? state.classes : getEditableClasses();
     var filterCls = document.getElementById('filter-class')?.value || 'ALL';
     var searchTerm = (document.getElementById('search-student')?.value || '').toLowerCase();
     var visible = session.students.filter(function(s) {
@@ -1395,9 +1708,10 @@ window.executeBulkDeleteByClass = async function() {
     updateStudentTable();
 };
 window.deleteAllStudents = async function() {
-    if (state.currentUser.role !== 'admin' && !getCtPermissions().delete) { showToast('🔒 Delete permission छैन', 'error'); return; }
+    if (!isAdmin() && !getCtPermissions().delete) { showToast('🔒 Delete permission छैन', 'error'); return; }
     var session = getActiveSessionData();
-    var editable = getEditableClasses();
+    var canSeeAll = isAdmin() || (isProUser() && hasProPermission('viewAllStudents'));
+    var editable = canSeeAll ? state.classes : getEditableClasses();
     var count = session.students.filter(function(s) { return editable.indexOf(s.className) > -1; }).length;
     if (count === 0) { showToast('No students to delete', 'info'); return; }
     var userInput = prompt('⚠️ WARNING: यो कार्यले ' + count + ' students हटाउनेछ।\n\nपुष्टि गर्न "DELETE ALL" टाइप गर्नुहोस्:');
@@ -1419,7 +1733,7 @@ window.deleteAllStudents = async function() {
 // ============================================================
 var editingTermId = null, confirmDeleteTermId = null;
 function renderTermManagement(container) {
-    if (state.currentUser.role !== 'admin') { container.innerHTML = '<div class="bg-red-50 border text-red-700 p-6 rounded-xl text-center"><i class="fas fa-lock text-3xl mb-3"></i><h3 class="font-bold">Admin Only</h3></div>'; return; }
+    if (!isAdmin() && !hasProPermission('manageTerms')) { container.innerHTML = '<div class="bg-red-50 border text-red-700 p-6 rounded-xl text-center"><i class="fas fa-lock text-3xl mb-3"></i><h3 class="font-bold">Access Denied</h3></div>'; return; }
     var session = getActiveSessionData();
     var terms = session.terms || [];
     var sessionYear = state.activeSession || '2083';
@@ -1507,14 +1821,16 @@ window.toggleTermLock = toggleTermLock;
 window.toggleTermPublish = toggleTermPublish;
 
 // ============================================================
-// TEACHERS
+// TEACHERS (with Pro Grant UI)
 // ============================================================
 var editingTeacherId = null, confirmDeleteTeacherId = null;
+var grantingProTeacherId = null;
+
 function renderAdminTeacherView(container) {
     var opts = state.teachers.map(t => '<option value="' + t.id + '">' + (t.fullName || t.username) + '</option>').join('');
     container.innerHTML = '<div class="fade-in max-w-xl mx-auto bg-white p-6 rounded-xl shadow-sm border mt-6"><div class="text-center mb-6"><div class="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-3 text-3xl"><i class="fas fa-user-secret"></i></div><h2 class="text-xl font-bold">Teacher Impersonation</h2></div><div class="mb-6 bg-gray-50 p-4 rounded-lg border"><select id="impersonate-teacher-id" class="w-full px-4 py-3 border rounded-lg text-sm bg-white"><option value="">-- Choose --</option>' + opts + '</select></div><button onclick="impersonateTeacher()" class="w-full bg-blue-600 text-white font-bold py-3 rounded-lg flex items-center justify-center gap-2"><i class="fas fa-sign-in-alt"></i>Switch View</button></div>';
 }
-function impersonateTeacher() { var id = document.getElementById('impersonate-teacher-id').value; if (!id) { showToast('Select a teacher', 'error'); return; } var t = state.teachers.find(x => x.id === id); if (t) { state.currentUser = Object.assign({}, t, { role: 'teacher', impersonating: true }); saveSession(); loadApp(); showToast('Switched', 'info'); } }
+function impersonateTeacher() { var id = document.getElementById('impersonate-teacher-id').value; if (!id) { showToast('Select a teacher', 'error'); return; } var t = state.teachers.find(x => x.id === id); if (t) { state.currentUser = Object.assign({}, t, { role: 'teacher', impersonating: true, isPro: !!t.isPro, proPermissions: t.proPermissions || {} }); saveSession(); loadApp(); showToast('Switched', 'info'); } }
 function returnToAdmin() { state.currentUser = { role: 'admin', username: 'Administrator' }; saveSession(); loadApp(); showToast('Back to Admin', 'info'); }
 window.renderAdminTeacherView = renderAdminTeacherView;
 window.impersonateTeacher = impersonateTeacher;
@@ -1548,7 +1864,7 @@ function handleTeacherExcelUpload(event) {
                 var cr = generateTeacherCredentials(name, contact);
                 var u = cr.username, p = cr.password, i = 1;
                 while (state.teachers.find(t => t.username === u)) { u = cr.username + i; i++; }
-                state.teachers.push({ id: 'T' + Date.now() + Math.floor(Math.random() * 1000), username: u, password: p, fullName: name, email: email, contact: contact || '-', assignments: [], classTeacherOf: [], studentPermissions: { add: true, edit: true, delete: true } });
+                state.teachers.push({ id: 'T' + Date.now() + Math.floor(Math.random() * 1000), username: u, password: p, fullName: name, email: email, contact: contact || '-', assignments: [], classTeacherOf: [], studentPermissions: { add: true, edit: true, delete: true }, isPro: false, proPermissions: {} });
                 added++;
             });
             if (added) saveState(true, 'teachers');
@@ -1588,7 +1904,7 @@ function handleCreateTeacher(e) {
         var cr = generateTeacherCredentials(name, contact);
         var u = cr.username, p = cr.password;
         if (state.teachers.find(t => t.username === u)) u += Math.floor(Math.random() * 10);
-        state.teachers.push({ id: 'T' + Date.now(), username: u, password: p, fullName: name, email: email, contact: contact || '-', assignments: sub ? [{ className: cls, subject: sub }] : [], classTeacherOf: isCT ? [cls] : [], studentPermissions: permissions });
+        state.teachers.push({ id: 'T' + Date.now(), username: u, password: p, fullName: name, email: email, contact: contact || '-', assignments: sub ? [{ className: cls, subject: sub }] : [], classTeacherOf: isCT ? [cls] : [], studentPermissions: permissions, isPro: false, proPermissions: {} });
         saveState(true, 'teachers'); showToast('Created ' + name, 'success');
         renderManageTeachers(document.getElementById('content-area'));
     } else {
@@ -1605,6 +1921,61 @@ function handleCreateTeacher(e) {
         updateTeacherList();
     }
 }
+
+// ---- PRO USER GRANT ----
+window.openGrantProModal = function(teacherId) {
+    var t = state.teachers.find(x => x.id === teacherId);
+    if (!t) return;
+    grantingProTeacherId = teacherId;
+    var existing = t.proPermissions || {};
+    var permHtml = window.PRO_PERMISSIONS.map(function(p) {
+        var checked = existing[p.key] === true ? ' checked' : '';
+        return '<label class="flex items-start gap-3 p-2.5 rounded border hover:bg-blue-50 cursor-pointer"><input type="checkbox" class="pro-perm-cb w-4 h-4 mt-0.5" data-key="' + p.key + '"' + checked + '><div class="flex-1"><div class="text-sm font-semibold text-gray-800"><i class="fas ' + p.icon + ' text-blue-600 mr-1"></i>' + p.label + '</div><div class="text-xs text-gray-500 mt-0.5">' + p.desc + '</div></div></label>';
+    }).join('');
+    var modal = '<div id="grant-pro-modal" class="fixed inset-0 z-[100] bg-black bg-opacity-60 flex items-center justify-center p-4"><div class="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto custom-scrollbar">' +
+        '<div class="p-5 border-b bg-gradient-to-r from-purple-600 to-indigo-600 text-white"><div class="flex items-center justify-between"><div class="flex items-center gap-3"><div class="w-11 h-11 bg-white bg-opacity-20 rounded-full flex items-center justify-center"><i class="fas fa-crown text-lg"></i></div><div><h3 class="text-lg font-bold">Grant Pro Access</h3><p class="text-xs opacity-90">' + (t.fullName || t.username) + ' — ' + (t.email || 'no email') + '</p></div></div><button onclick="closeGrantProModal()" class="text-white hover:bg-white hover:bg-opacity-20 w-8 h-8 rounded-full flex items-center justify-center"><i class="fas fa-times"></i></button></div></div>' +
+        '<div class="p-5">' +
+            '<div class="bg-purple-50 border border-purple-200 rounded-lg p-3 mb-4 text-xs text-purple-800"><i class="fas fa-info-circle mr-1"></i><strong>Pro User को विशेषता:</strong> Admin भन्दा कम, Teacher भन्दा बढी access। तल checkbox गरेको काम मात्र यो user ले गर्न पाउने।</div>' +
+            '<div class="flex items-center gap-3 mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg"><input type="checkbox" id="is-pro-toggle" class="w-5 h-5"' + (t.isPro ? ' checked' : '') + ' onchange="toggleProActive(this)"><label for="is-pro-toggle" class="text-sm font-bold text-amber-900 cursor-pointer">✓ यो Teacher लाई Pro User बनाउने (Enable Pro Access)</label></div>' +
+            '<div id="pro-perm-list" class="' + (t.isPro ? '' : 'opacity-50 pointer-events-none') + '">' +
+                '<div class="flex items-center justify-between mb-2"><h4 class="text-sm font-bold text-gray-700">Granted Permissions:</h4><div class="flex gap-2"><button onclick="selectAllProPerms(true)" class="text-xs bg-emerald-100 text-emerald-700 px-3 py-1 rounded font-semibold">Select All</button><button onclick="selectAllProPerms(false)" class="text-xs bg-gray-100 text-gray-700 px-3 py-1 rounded font-semibold">Clear All</button></div></div>' +
+                '<div class="grid grid-cols-1 sm:grid-cols-2 gap-2">' + permHtml + '</div>' +
+            '</div>' +
+            '<div class="flex gap-2 mt-5"><button onclick="saveGrantPro()" class="flex-1 bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-bold py-2.5 rounded-lg"><i class="fas fa-save mr-1"></i>Save Pro Permissions</button><button onclick="closeGrantProModal()" class="px-5 bg-gray-100 text-gray-700 font-medium py-2.5 rounded-lg">Cancel</button></div>' +
+        '</div>' +
+    '</div></div>';
+    var div = document.createElement('div');
+    div.innerHTML = modal;
+    document.body.appendChild(div.firstChild);
+};
+window.closeGrantProModal = function() {
+    var m = document.getElementById('grant-pro-modal');
+    if (m) m.remove();
+    grantingProTeacherId = null;
+};
+window.toggleProActive = function(cb) {
+    var list = document.getElementById('pro-perm-list');
+    if (cb.checked) list.classList.remove('opacity-50', 'pointer-events-none');
+    else list.classList.add('opacity-50', 'pointer-events-none');
+};
+window.selectAllProPerms = function(checked) {
+    document.querySelectorAll('.pro-perm-cb').forEach(function(cb) { cb.checked = checked; });
+};
+window.saveGrantPro = function() {
+    if (!grantingProTeacherId) return;
+    var t = state.teachers.find(x => x.id === grantingProTeacherId);
+    if (!t) return;
+    var isProOn = document.getElementById('is-pro-toggle').checked;
+    t.isPro = isProOn;
+    var perms = {};
+    document.querySelectorAll('.pro-perm-cb').forEach(function(cb) { if (cb.checked) perms[cb.getAttribute('data-key')] = true; });
+    t.proPermissions = perms;
+    saveState(true, 'teachers');
+    closeGrantProModal();
+    showToast('✅ Pro permissions saved for ' + (t.fullName || t.username), 'success');
+    updateTeacherList();
+};
+
 function updateTeacherList() {
     var c = document.getElementById('teacher-list-container');
     if (!c) return;
@@ -1620,8 +1991,13 @@ function updateTeacherList() {
             return '<span class="bg-green-50 text-green-700 border border-green-200 text-xs px-2 py-1 rounded-md mb-1 mr-1 inline-flex items-center flex-wrap"><i class="fas fa-star text-[10px] mr-1"></i>CT: ' + cl + permBadges + '<button onclick="removeClassTeacher(\'' + t.id + '\',\'' + cl + '\')" class="text-red-400 ml-1"><i class="fas fa-times"></i></button></span>';
         }).join('');
         var b = t.assignments.map((a, i) => '<span class="bg-blue-50 text-blue-700 border border-blue-200 text-xs px-2 py-1 rounded-md mb-1 mr-1 inline-flex items-center">' + a.className + ' - ' + a.subject + '<button onclick="removeAssignment(\'' + t.id + '\',' + i + ')" class="text-red-400 ml-1"><i class="fas fa-times"></i></button></span>').join('');
+        var proBadge = '';
+        if (t.isPro) {
+            var permCount = Object.keys(t.proPermissions || {}).filter(k => t.proPermissions[k] === true).length;
+            proBadge = '<span class="bg-gradient-to-r from-purple-500 to-indigo-500 text-white text-[10px] px-2 py-0.5 rounded-full font-bold ml-2 inline-flex items-center gap-1"><i class="fas fa-crown"></i>PRO USER (' + permCount + ')</span>';
+        }
         var d = document.createElement('div');
-        d.className = 'border rounded-lg p-3 flex flex-col sm:flex-row justify-between gap-3 hover:shadow-md bg-white';
+        d.className = 'border rounded-lg p-3 flex flex-col sm:flex-row justify-between gap-3 hover:shadow-md bg-white' + (t.isPro ? ' ring-2 ring-purple-200' : '');
         if (editingTeacherId === t.id) {
             var permsEdit = t.studentPermissions || { add: true, edit: true, delete: true };
             var isCTEdit = (t.classTeacherOf || []).length > 0;
@@ -1641,7 +2017,7 @@ function updateTeacherList() {
         } else if (confirmDeleteTeacherId === t.id) {
             d.innerHTML = '<div class="text-red-600 flex flex-col gap-2 font-medium w-full"><div><i class="fas fa-exclamation-triangle mr-1"></i>Delete ' + (t.fullName || t.username) + '?</div><div class="flex gap-2"><button onclick="executeDeleteTeacher(\'' + t.id + '\')" class="bg-red-600 text-white px-3 py-2 rounded text-sm flex-1">Yes</button><button onclick="cancelDeleteTeacher()" class="bg-gray-200 px-3 py-2 rounded text-sm flex-1">No</button></div></div>';
         } else {
-            d.innerHTML = '<div class="w-full sm:w-1/3"><div class="flex items-start gap-3"><div class="w-10 h-10 rounded-full bg-blue-50 border border-blue-200 flex items-center justify-center text-blue-600"><i class="fas fa-user-tie"></i></div><div class="min-w-0 flex-1"><h4 class="font-bold text-sm truncate">' + (t.fullName || t.username) + '</h4><p class="text-xs text-blue-600 truncate">@' + t.username + ' | ' + t.password + '</p><p class="text-xs ' + (t.email ? 'text-purple-700' : 'text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 inline-block') + ' truncate mt-1"><i class="fab fa-google text-red-500 mr-1"></i>' + (t.email || 'No Gmail') + '</p><p class="text-xs text-gray-500 mt-0.5"><i class="fas fa-phone mr-1"></i>' + (t.contact || '-') + '</p></div></div><div class="flex gap-3 mt-2"><button onclick="startEditTeacher(\'' + t.id + '\')" class="text-xs text-blue-600"><i class="fas fa-edit mr-1"></i>Edit</button><button onclick="startDeleteTeacher(\'' + t.id + '\')" class="text-xs text-red-500"><i class="fas fa-trash mr-1"></i>Delete</button></div></div><div class="flex-1 w-full sm:w-2/3 border-t sm:border-t-0 sm:border-l pt-3 sm:pt-0 sm:pl-4"><p class="text-xs text-gray-500 font-semibold mb-2 uppercase">Assignments</p><div class="flex flex-wrap">' + ctB + b + (ctB || b ? '' : '<span class="text-xs text-gray-400 italic">None</span>') + '</div></div>';
+            d.innerHTML = '<div class="w-full sm:w-1/3"><div class="flex items-start gap-3"><div class="w-10 h-10 rounded-full ' + (t.isPro ? 'bg-gradient-to-br from-purple-500 to-indigo-500 text-white' : 'bg-blue-50 text-blue-600 border border-blue-200') + ' flex items-center justify-center">' + (t.isPro ? '<i class="fas fa-crown"></i>' : '<i class="fas fa-user-tie"></i>') + '</div><div class="min-w-0 flex-1"><div class="flex items-center flex-wrap"><h4 class="font-bold text-sm truncate">' + (t.fullName || t.username) + '</h4>' + proBadge + '</div><p class="text-xs text-blue-600 truncate">@' + t.username + ' | ' + t.password + '</p><p class="text-xs ' + (t.email ? 'text-purple-700' : 'text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 inline-block') + ' truncate mt-1"><i class="fab fa-google text-red-500 mr-1"></i>' + (t.email || 'No Gmail') + '</p><p class="text-xs text-gray-500 mt-0.5"><i class="fas fa-phone mr-1"></i>' + (t.contact || '-') + '</p></div></div><div class="flex flex-wrap gap-2 mt-2"><button onclick="startEditTeacher(\'' + t.id + '\')" class="text-xs text-blue-600"><i class="fas fa-edit mr-1"></i>Edit</button><button onclick="openGrantProModal(\'' + t.id + '\')" class="text-xs font-bold ' + (t.isPro ? 'bg-purple-100 text-purple-700 hover:bg-purple-200' : 'bg-gray-100 text-gray-700 hover:bg-gray-200') + ' px-2 py-1 rounded"><i class="fas fa-crown mr-1"></i>' + (t.isPro ? 'Manage Pro' : 'Grant Pro') + '</button><button onclick="startDeleteTeacher(\'' + t.id + '\')" class="text-xs text-red-500"><i class="fas fa-trash mr-1"></i>Delete</button></div></div><div class="flex-1 w-full sm:w-2/3 border-t sm:border-t-0 sm:border-l pt-3 sm:pt-0 sm:pl-4"><p class="text-xs text-gray-500 font-semibold mb-2 uppercase">Assignments</p><div class="flex flex-wrap">' + ctB + b + (ctB || b ? '' : '<span class="text-xs text-gray-400 italic">None</span>') + '</div></div>';
         }
         c.appendChild(d);
     });
@@ -1705,10 +2081,15 @@ function renderMyClasses(container) {
         var perms = u.studentPermissions || { add: true, edit: true, delete: true };
         ctCards = u.classTeacherOf.map(c => '<div class="bg-green-50 p-4 rounded-xl border border-green-200 flex flex-col gap-2"><div class="flex items-center gap-4"><div class="w-12 h-12 rounded-full bg-green-200 text-green-700 flex items-center justify-center text-xl"><i class="fas fa-star"></i></div><div><h4 class="font-bold">Class Teacher</h4><p class="text-sm text-green-700 font-semibold">' + c + '</p></div></div><div class="flex flex-wrap gap-1 mt-1">' + (perms.add ? '<span class="bg-emerald-100 text-emerald-700 text-[10px] px-2 py-0.5 rounded font-bold">+ADD</span>' : '<span class="bg-gray-200 text-gray-500 text-[10px] px-2 py-0.5 rounded line-through">ADD</span>') + (perms.edit ? '<span class="bg-blue-100 text-blue-700 text-[10px] px-2 py-0.5 rounded font-bold">EDIT</span>' : '<span class="bg-gray-200 text-gray-500 text-[10px] px-2 py-0.5 rounded line-through">EDIT</span>') + (perms.delete ? '<span class="bg-red-100 text-red-700 text-[10px] px-2 py-0.5 rounded font-bold">DELETE</span>' : '<span class="bg-gray-200 text-gray-500 text-[10px] px-2 py-0.5 rounded line-through">DELETE</span>') + '</div></div>').join('');
     }
-    container.innerHTML = '<div class="fade-in max-w-5xl mx-auto">' + (ctCards ? '<h3 class="text-lg font-semibold mb-4"><i class="fas fa-crown text-yellow-500 mr-2"></i>Class Teacher Roles</h3><div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">' + ctCards + '</div>' : '') + '<h3 class="text-lg font-semibold mb-4"><i class="fas fa-chalkboard-teacher text-blue-500 mr-2"></i>Assigned Subjects</h3><div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">' + cards + '</div></div>';
+    var proCard = '';
+    if (isProUser()) {
+        var activePerms = window.PRO_PERMISSIONS.filter(p => hasProPermission(p.key));
+        proCard = '<div class="bg-gradient-to-br from-purple-50 to-indigo-50 p-5 rounded-xl border-2 border-purple-200 mb-6"><div class="flex items-center gap-3 mb-3"><div class="w-12 h-12 rounded-full bg-gradient-to-br from-purple-500 to-indigo-500 text-white flex items-center justify-center text-xl"><i class="fas fa-crown"></i></div><div><h3 class="font-bold text-purple-900">Pro User Access</h3><p class="text-xs text-purple-700">' + activePerms.length + ' permissions granted</p></div></div><div class="flex flex-wrap gap-1.5">' + activePerms.map(p => '<span class="bg-white border border-purple-200 text-purple-700 text-xs px-2 py-1 rounded-md font-medium"><i class="fas ' + p.icon + ' mr-1"></i>' + p.label + '</span>').join('') + '</div></div>';
+    }
+    container.innerHTML = '<div class="fade-in max-w-5xl mx-auto">' + proCard + (ctCards ? '<h3 class="text-lg font-semibold mb-4"><i class="fas fa-crown text-yellow-500 mr-2"></i>Class Teacher Roles</h3><div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">' + ctCards + '</div>' : '') + '<h3 class="text-lg font-semibold mb-4"><i class="fas fa-chalkboard-teacher text-blue-500 mr-2"></i>Assigned Subjects</h3><div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">' + cards + '</div></div>';
 }
 function renderProfileSettings(container) {
-    container.innerHTML = '<div class="fade-in max-w-md mx-auto bg-white p-6 rounded-xl border shadow-sm"><h3 class="text-base font-bold mb-4 border-b pb-2"><i class="fas fa-key mr-2 text-blue-600"></i>Change Password</h3><form onsubmit="handleTeacherPasswordChange(event)"><div class="mb-4"><label class="block text-sm font-medium mb-1">Current Password</label><input type="password" id="current-pass" class="w-full px-3 py-2 border rounded-lg text-sm" required></div><div class="mb-4"><label class="block text-sm font-medium mb-1">New Password</label><input type="password" id="new-pass" class="w-full px-3 py-2 border rounded-lg text-sm" required></div><div class="mb-6"><label class="block text-sm font-medium mb-1">Confirm</label><input type="password" id="confirm-pass" class="w-full px-3 py-2 border rounded-lg text-sm" required></div><button type="submit" class="w-full bg-blue-600 text-white font-bold py-2.5 rounded-lg text-sm"><i class="fas fa-save mr-1"></i>Update Password</button></form></div>';
+    container.innerHTML = '<div class="fade-in max-w-md mx-auto bg-white p-6 rounded-xl border shadow-sm"><h3 class="text-base font-bold mb-4 border-b pb-2"><i class="fas fa-key mr-2 text-blue-600"></i>Change Password</h3><form onsubmit="handleTeacherPasswordChange(event)"><div class="mb-4"><label class="block text-sm font-medium mb-1">Current Password</label><input type="password" id="current-pass" class="w-full px-3 py-2 border rounded-lg text-sm" required></div><div class="mb-4"><label class="block text-sm font-medium mb-1">New Password</label><input type="password" id="new-pass" class="w-full px-3 py-2 rounded-lg border text-sm" required></div><div class="mb-6"><label class="block text-sm font-medium mb-1">Confirm</label><input type="password" id="confirm-pass" class="w-full px-3 py-2 border rounded-lg text-sm" required></div><button type="submit" class="w-full bg-blue-600 text-white font-bold py-2.5 rounded-lg text-sm"><i class="fas fa-save mr-1"></i>Update Password</button></form></div>';
 }
 function handleTeacherPasswordChange(e) {
     e.preventDefault();
@@ -1886,9 +2267,11 @@ window.saveStudentSubjects = saveStudentSubjects;
 window.saveAllStudentSubjects = saveAllStudentSubjects;
 window.loadCreditHours = loadCreditHours;
 window.saveCreditHours = saveCreditHours;
+</script>
 
+<script>
 // ============================================================
-// EXAM PROCESS
+// EXAM PROCESS (with Term-wise Symbol Number)
 // ============================================================
 function renderExamProcess(container) {
     container.innerHTML = '<div class="fade-in flex flex-col h-full gap-4"><div class="flex overflow-x-auto border-b bg-gray-50 hide-scrollbar rounded-t-xl"><button onclick="switchExamProcessTab(\'routine\')" id="sub-tab-routine" class="exam-process-tab px-6 py-3 text-sm font-semibold text-blue-600 border-b-2 border-blue-600 whitespace-nowrap">Routine</button><button onclick="switchExamProcessTab(\'term-mark-mgmt\')" id="sub-tab-term-mark-mgmt" class="exam-process-tab px-6 py-3 text-sm font-medium text-gray-500 border-b-2 border-transparent whitespace-nowrap">Mark Mgmt</button><button onclick="switchExamProcessTab(\'symbol-no\')" id="sub-tab-symbol-no" class="exam-process-tab px-6 py-3 text-sm font-medium text-gray-500 border-b-2 border-transparent whitespace-nowrap">Symbol No</button><button onclick="switchExamProcessTab(\'admit-card\')" id="sub-tab-admit-card" class="exam-process-tab px-6 py-3 text-sm font-medium text-gray-500 border-b-2 border-transparent whitespace-nowrap">Admit Card</button><button onclick="switchExamProcessTab(\'mark-slip\')" id="sub-tab-mark-slip" class="exam-process-tab px-6 py-3 text-sm font-medium text-gray-500 border-b-2 border-transparent whitespace-nowrap">Mark Slip</button></div><div id="exam-process-content" class="flex-1 min-w-0 bg-white border rounded-b-xl p-4 shadow-sm overflow-y-auto"></div></div>';
@@ -1963,24 +2346,34 @@ function saveExamRoutineMatrix() {
     state.classes.forEach(function(cls) { state.examSettings.routines[cls] = newR[cls] || []; });
     saveState(true); showToast('Routine saved!', 'success'); renderExamRoutine(document.getElementById('exam-process-content'));
 }
+
+// ---- TERM-WISE SYMBOL NO ----
 function renderSymbolNo(container) {
     var opts = state.classes.map(c => '<option value="' + c + '">' + c + '</option>').join('');
-    container.innerHTML = '<div class="max-w-5xl mx-auto flex flex-col h-full"><div class="bg-gray-50 p-4 rounded border mb-4 shrink-0"><div class="flex flex-col sm:flex-row gap-4 justify-between mb-4"><select id="sym-class-select" class="px-4 py-2 border rounded text-sm bg-white" onchange="loadSymbolList()"><option value="">Select Class</option>' + opts + '</select><button onclick="generateSymbolNos()" class="bg-blue-600 text-white px-5 py-2.5 rounded text-sm font-bold"><i class="fas fa-magic mr-1"></i>Auto Generate</button></div><div class="flex flex-col sm:flex-row gap-4 items-center bg-white p-3 rounded border text-sm"><div class="text-blue-600 text-xs"><i class="fas fa-info-circle mr-1"></i>Enter starting symbol number for first checked.</div><label class="flex items-center gap-2 ml-auto"><input type="checkbox" id="sym-append-alpha" class="w-4 h-4"><span class="font-medium">Append Alphabet</span></label></div></div><div id="sym-list-container" class="flex-1 min-h-0 flex flex-col"><p class="text-gray-500 text-center py-8">Select class.</p></div></div>';
+    var termOpts = getTerms().map(t => '<option value="' + t.name + '">' + t.name + (t.locked ? ' 🔒' : '') + '</option>').join('');
+    container.innerHTML = '<div class="max-w-5xl mx-auto flex flex-col h-full"><div class="bg-gray-50 p-4 rounded border mb-4 shrink-0"><div class="flex flex-col sm:flex-row gap-4 justify-between mb-4 flex-wrap"><div class="flex flex-col sm:flex-row gap-3 flex-1"><select id="sym-term-select" class="px-4 py-2 border-2 border-blue-300 rounded text-sm bg-blue-50 font-semibold text-blue-800 w-full sm:w-auto" onchange="loadSymbolList()"><option value="">-- Select Term --</option>' + termOpts + '</select><select id="sym-class-select" class="px-4 py-2 border rounded text-sm bg-white w-full sm:w-auto" onchange="loadSymbolList()"><option value="">Select Class</option>' + opts + '</select></div><button onclick="generateSymbolNos()" class="bg-blue-600 text-white px-5 py-2.5 rounded text-sm font-bold w-full sm:w-auto"><i class="fas fa-magic mr-1"></i>Auto Generate</button></div><div class="bg-amber-50 border border-amber-200 rounded p-2 mb-3 text-xs text-amber-800"><i class="fas fa-info-circle mr-1"></i><strong>Term-wise Symbol:</strong> प्रत्येक Term को लागि फरक symbol number दिन सकिन्छ।</div><div class="flex flex-col sm:flex-row gap-4 items-center bg-white p-3 rounded border text-sm"><div class="text-blue-600 text-xs"><i class="fas fa-info-circle mr-1"></i>Enter starting symbol number for first checked student.</div><label class="flex items-center gap-2 ml-auto"><input type="checkbox" id="sym-append-alpha" class="w-4 h-4"><span class="font-medium">Append Alphabet (A-Z)</span></label></div></div><div id="sym-list-container" class="flex-1 min-h-0 flex flex-col"><p class="text-gray-500 text-center py-8">Select Term and Class.</p></div></div>';
 }
 function loadSymbolList() {
+    var term = document.getElementById('sym-term-select').value;
     var cls = document.getElementById('sym-class-select').value;
     var c = document.getElementById('sym-list-container');
-    if (!cls) { c.innerHTML = ''; return; }
+    if (!term) { c.innerHTML = '<p class="text-amber-600 text-center py-8 font-semibold"><i class="fas fa-exclamation-triangle mr-2"></i>पहिले Term select गर्नुहोस्।</p>'; return; }
+    if (!cls) { c.innerHTML = '<p class="text-gray-500 text-center py-8">पहिले Class select गर्नुहोस्।</p>'; return; }
     var session = getActiveSessionData();
     var studs = session.students.filter(s => s.className === cls);
-    if (!studs.length) { c.innerHTML = '<p class="text-gray-500 text-center py-8">No students.</p>'; return; }
-    var rows = studs.map((s, i) => '<tr class="border-b hover:bg-gray-50 bg-white"><td class="px-3 py-3 text-center"><input type="checkbox" class="sym-student-cb w-4 h-4" value="' + s.id + '" checked></td><td class="px-3 py-3 text-gray-500 text-center">' + (i+1) + '</td><td class="px-3 py-3 font-medium text-sm">' + s.name + '</td><td class="px-3 py-3 text-sm text-gray-500 text-center">' + s.id + '</td><td class="px-3 py-3 text-center"><input type="text" id="sym-input-' + s.id + '" value="' + (s.symbolNo || '') + '" class="w-32 px-2 py-1.5 border border-blue-200 rounded text-blue-700 font-bold text-center uppercase text-sm bg-blue-50/50"></td></tr>').join('');
-    c.innerHTML = '<div class="bg-white border rounded shadow-sm flex-1 flex flex-col min-h-0 mb-4"><div class="overflow-auto custom-scrollbar flex-1"><table class="w-full text-sm text-left whitespace-nowrap min-w-max"><thead class="bg-gray-100 sticky top-0 z-10"><tr><th class="px-3 py-3 w-12 text-center"><input type="checkbox" checked onchange="toggleAllSymbolCheckboxes(this)"></th><th class="px-3 py-3 w-16 text-center">S.N.</th><th class="px-3 py-3">Name</th><th class="px-3 py-3 text-center">ID</th><th class="px-3 py-3 text-center">Symbol No</th></tr></thead><tbody>' + rows + '</tbody></table></div></div><div class="flex justify-end"><button onclick="saveSymbolNos(\'' + cls + '\')" class="bg-green-600 text-white px-6 py-2.5 rounded text-sm font-bold"><i class="fas fa-save mr-1"></i>Save</button></div>';
+    if (!studs.length) { c.innerHTML = '<p class="text-gray-500 text-center py-8">No students in this class.</p>'; return; }
+    var rows = studs.map((s, i) => {
+        var symForTerm = (s.symbolNos && s.symbolNos[term]) || '';
+        return '<tr class="border-b hover:bg-gray-50 bg-white"><td class="px-3 py-3 text-center"><input type="checkbox" class="sym-student-cb w-4 h-4" value="' + s.id + '" checked></td><td class="px-3 py-3 text-gray-500 text-center">' + (i+1) + '</td><td class="px-3 py-3 font-medium text-sm">' + s.name + '</td><td class="px-3 py-3 text-sm text-gray-500 text-center">' + s.id + '</td><td class="px-3 py-3 text-center"><input type="text" id="sym-input-' + s.id + '" value="' + symForTerm + '" placeholder="e.g. 8101001" class="w-32 px-2 py-1.5 border border-blue-200 rounded text-blue-700 font-bold text-center uppercase text-sm bg-blue-50/50"></td></tr>';
+    }).join('');
+    c.innerHTML = '<div class="bg-white border rounded shadow-sm flex-1 flex flex-col min-h-0 mb-4"><div class="p-2 bg-blue-100 border-b border-blue-200 text-xs text-blue-800 font-semibold text-center"><i class="fas fa-tag mr-1"></i>Generating for: <strong>' + term + '</strong> (' + cls + ')</div><div class="overflow-auto custom-scrollbar flex-1"><table class="w-full text-sm text-left whitespace-nowrap min-w-max"><thead class="bg-gray-100 sticky top-0 z-10"><tr><th class="px-3 py-3 w-12 text-center"><input type="checkbox" checked onchange="toggleAllSymbolCheckboxes(this)"></th><th class="px-3 py-3 w-16 text-center">S.N.</th><th class="px-3 py-3">Name</th><th class="px-3 py-3 text-center">System ID</th><th class="px-3 py-3 text-center">Symbol No (' + term + ')</th></tr></thead><tbody>' + rows + '</tbody></table></div></div><div class="flex justify-end gap-2"><button onclick="copySymbolsFromTerm(\'' + term + '\',\'' + cls + '\')" class="bg-gray-600 text-white px-4 py-2.5 rounded text-sm font-bold"><i class="fas fa-copy mr-1"></i>Copy from Another Term</button><button onclick="saveSymbolNos(\'' + cls + '\')" class="bg-green-600 text-white px-6 py-2.5 rounded text-sm font-bold"><i class="fas fa-save mr-1"></i>Save for ' + term + '</button></div>';
 }
 function toggleAllSymbolCheckboxes(m) { document.querySelectorAll('.sym-student-cb').forEach(cb => cb.checked = m.checked); }
 function generateSymbolNos() {
+    var term = document.getElementById('sym-term-select').value;
+    if (!term) { showToast('Select Term first', 'error'); return; }
     var cls = document.getElementById('sym-class-select').value;
-    if (!cls) { showToast('Select class', 'error'); return; }
+    if (!cls) { showToast('Select Class', 'error'); return; }
     var alpha = document.getElementById('sym-append-alpha').checked;
     var cbs = document.querySelectorAll('.sym-student-cb');
     var startIdx = -1, baseNum = '';
@@ -2003,13 +2396,45 @@ function generateSymbolNos() {
     if (cnt > 0) showToast('Generated for ' + cnt + ' students', 'info');
 }
 function saveSymbolNos(cls) {
+    var term = document.getElementById('sym-term-select').value;
+    if (!term) { showToast('Please select Term first', 'error'); return; }
+    if (isTermLocked(term) && !isAdmin() && !hasProPermission('manageExamProcess')) { showToast('🔒 Term locked', 'error'); return; }
     var session = getActiveSessionData();
     var studs = session.students.filter(s => s.className === cls);
     var n = 0;
-    studs.forEach(function(s) { var inp = document.getElementById('sym-input-' + s.id); if (inp) { var v = inp.value.trim(); if (s.symbolNo !== v) { s.symbolNo = v; n++; } } });
+    studs.forEach(function(s) {
+        var inp = document.getElementById('sym-input-' + s.id);
+        if (inp) {
+            var v = inp.value.trim();
+            if (!s.symbolNos) s.symbolNos = {};
+            if (s.symbolNos[term] !== v) { s.symbolNos[term] = v; n++; }
+            if (n === 1 && !s.symbolNo) s.symbolNo = v;
+        }
+    });
     saveState(true, 'students');
-    showToast('Saved ' + n + ' symbols', 'success');
+    showToast('✅ Saved ' + n + ' symbols for ' + term + '!', 'success');
 }
+function copySymbolsFromTerm(currentTerm, cls) {
+    var terms = getTerms().filter(t => t.name !== currentTerm);
+    if (!terms.length) { showToast('No other terms to copy from', 'error'); return; }
+    var choice = prompt('Copy symbol numbers from which term?\n\nAvailable: ' + terms.map(t => t.name).join(', ') + '\n\nType the term name exactly:');
+    if (!choice) return;
+    var sourceTerm = terms.find(t => t.name.toLowerCase() === choice.trim().toLowerCase());
+    if (!sourceTerm) { showToast('Term not found', 'error'); return; }
+    var session = getActiveSessionData();
+    var studs = session.students.filter(s => s.className === cls);
+    var copied = 0;
+    studs.forEach(function(s) {
+        var src = (s.symbolNos && s.symbolNos[sourceTerm.name]) || '';
+        if (src) {
+            var inp = document.getElementById('sym-input-' + s.id);
+            if (inp) { inp.value = src; copied++; }
+        }
+    });
+    showToast('Copied ' + copied + ' symbols from ' + sourceTerm.name + '. Click Save to apply.', 'info');
+}
+
+// ---- ADMIT CARD ----
 function renderAdmitCard(container) {
     var clsOpts = state.classes.map(c => '<option value="' + c + '">' + c + '</option>').join('');
     var termOpts = getTerms().map(t => '<option value="' + t.name + '">' + t.name + '</option>').join('');
@@ -2040,7 +2465,7 @@ function loadAdmitCards() {
     var cards = studs.map(function(st) {
         var et = term + ' - ' + year;
         var rr = rt.length ? rt.map((r, i) => '<tr><td style="border:1px solid #1e3a8a;padding:2px 4px;text-align:center;">' + (i+1) + '</td><td style="border:1px solid #1e3a8a;padding:2px 4px;text-align:center;">' + formatDateBS(r.date) + '</td><td style="border:1px solid #1e3a8a;padding:2px 4px;text-align:left;">' + (r.subject || '-') + '</td><td style="border:1px solid #1e3a8a;padding:2px 4px;text-align:center;">' + (times[r.date] || defT) + '</td></tr>').join('') : '<tr><td colspan="4" style="border:1px solid #1e3a8a;padding:6px;text-align:center;">No routine.</td></tr>';
-        var sym = st.symbolNo || '';
+        var sym = (st.symbolNos && st.symbolNos[term]) || st.symbolNo || '';
         var m = sym.match(/\d+/); var w = m ? numToWords(parseInt(m[0], 10)) : '';
         var al = sym.match(/[a-zA-Z]+$/); if (al) w += ' - ' + al[0].toUpperCase();
         var inner = '<div style="font-family:\'Times New Roman\',serif;color:#000;height:100%;display:flex;flex-direction:column;"><div style="display:flex;align-items:center;justify-content:space-between;border-bottom:2px solid #1e3a8a;padding-bottom:5px;margin-bottom:6px;"><div style="width:60px;">' + logo + '</div><div style="text-align:center;flex:1;padding:0 4px;"><h1 style="font-size:15px;font-weight:bold;margin:0;color:#1e3a8a;text-transform:uppercase;">' + sName + '</h1><p style="font-size:9px;margin:2px 0;">' + sAddr + '</p><h2 style="font-size:11px;font-weight:bold;margin:2px 0 0 0;color:#1e3a8a;">' + et + '</h2></div><div style="width:60px;"></div></div><div style="text-align:center;margin-bottom:6px;"><span style="background:#1e3a8a;color:white;padding:2px 12px;font-size:10px;font-weight:bold;border-radius:3px;">प्रवेश पत्र / ADMIT CARD</span></div><table style="width:100%;border-collapse:collapse;margin-bottom:6px;font-size:10px;"><tr><td style="border:1px solid #93c5fd;padding:2px 5px;background:#eff6ff;">Name:</td><td style="border:1px solid #93c5fd;padding:2px 5px;font-weight:bold;">' + st.name + '</td><td style="border:1px solid #93c5fd;padding:2px 5px;background:#eff6ff;">Class:</td><td style="border:1px solid #93c5fd;padding:2px 5px;font-weight:bold;">' + st.className + '</td></tr><tr><td style="border:1px solid #93c5fd;padding:2px 5px;background:#eff6ff;">Symbol:</td><td style="border:1px solid #93c5fd;padding:2px 5px;font-weight:bold;color:#1e3a8a;" colspan="3">' + sym + '</td></tr><tr><td style="border:1px solid #93c5fd;padding:2px 5px;background:#eff6ff;">Words:</td><td style="border:1px solid #93c5fd;padding:2px 5px;font-weight:bold;" colspan="3">' + w + '</td></tr></table><div style="text-align:center;font-weight:bold;font-size:10px;text-decoration:underline;margin-bottom:4px;color:#1e3a8a;">EXAM ROUTINE</div><table style="width:100%;border-collapse:collapse;font-size:9.5px;margin-bottom:6px;flex-grow:1;"><thead><tr style="background:#1e3a8a;color:white;"><th style="border:1px solid #1e3a8a;padding:2px 4px;">S.N</th><th style="border:1px solid #1e3a8a;padding:2px 4px;">Date</th><th style="border:1px solid #1e3a8a;padding:2px 4px;text-align:left;">Subject</th><th style="border:1px solid #1e3a8a;padding:2px 4px;">Time</th></tr></thead><tbody>' + rr + '</tbody></table><div style="margin-top:auto;">' + sig + '</div></div>';
@@ -2053,6 +2478,8 @@ function loadAdmitCards() {
     for (var i = 0; i < cards.length; i += ppNum) groups += '<div class="' + pageCls + '">' + cards.slice(i, i + ppNum).map(c => c.print).join('') + '</div>';
     cp.innerHTML = groups;
 }
+
+// ---- MARK SLIP ----
 function renderMarkSlip(container) {
     var clsOpts = state.classes.map(c => '<option value="' + c + '">' + c + '</option>').join('');
     var termOpts = getTerms().map(t => '<option value="' + t.name + '">' + t.name + '</option>').join('');
@@ -2074,7 +2501,8 @@ function loadMarkSlip() {
     thead += '</tr></thead>';
     var tbody = '';
     studs.sort((a, b) => a.name.localeCompare(b.name)).forEach(function(st, i) {
-        var row = '<tr class="text-sm bg-white"><td class="px-3 py-3 border text-center">' + (i+1) + '</td><td class="px-4 py-3 border text-center">' + (st.symbolNo || '-') + '</td><td class="px-4 py-3 border font-semibold">' + st.name + '</td>';
+        var symForTerm = (st.symbolNos && st.symbolNos[term]) || st.symbolNo || '';
+        var row = '<tr class="text-sm bg-white"><td class="px-3 py-3 border text-center">' + (i+1) + '</td><td class="px-4 py-3 border text-center">' + (symForTerm || '-') + '</td><td class="px-4 py-3 border font-semibold">' + st.name + '</td>';
         divs.forEach(() => { row += '<td class="px-2 py-3 border text-center"></td>'; });
         row += '<td class="px-2 py-3 border text-center"></td></tr>';
         tbody += row;
@@ -2096,6 +2524,7 @@ window.loadSymbolList = loadSymbolList;
 window.toggleAllSymbolCheckboxes = toggleAllSymbolCheckboxes;
 window.generateSymbolNos = generateSymbolNos;
 window.saveSymbolNos = saveSymbolNos;
+window.copySymbolsFromTerm = copySymbolsFromTerm;
 window.changeAdmitPerPage = changeAdmitPerPage;
 window.loadAdmitCards = loadAdmitCards;
 window.updateSlipSubjectDropdown = updateSlipSubjectDropdown;
@@ -2196,7 +2625,7 @@ function getMarkEntryDivisions(cls, sub) {
 }
 function renderMarkEntryGrid(container, cls, sub, term, editable) {
     var lockInfo = findTerm(term);
-    if (lockInfo && lockInfo.locked && state.currentUser.role !== 'admin') {
+    if (lockInfo && lockInfo.locked && !isAdmin() && !hasProPermission('manageExamProcess')) {
         container.innerHTML = '<div class="bg-red-50 border-2 border-red-200 rounded p-8 text-center"><i class="fas fa-lock text-red-500 text-5xl mb-4"></i><h3 class="text-lg font-bold text-red-700 mb-2">Term Locked</h3><p class="text-sm text-red-600 mb-4">🔒 "' + term + '" is locked.</p></div>';
         return;
     }
@@ -2215,6 +2644,7 @@ function renderMarkEntryGrid(container, cls, sub, term, editable) {
         var mySubs = isHigher ? ((state.examSettings.studentSubjects && state.examSettings.studentSubjects[st.id]) || []) : [sub];
         var ne = isHigher && mySubs.indexOf(sub) === -1;
         var mr = session.marks.find(m => m.studentId === st.id && m.term === term && m.subject === sub);
+        var symForTerm = (st.symbolNos && st.symbolNos[term]) || st.symbolNo || '';
         var rowTotal = 0;
         var cells = '';
         if (ne) { divs.forEach(() => { cells += '<td class="px-2 py-2 border text-center bg-gray-100 text-gray-400 text-xs">N/A</td>'; }); cells += '<td class="px-2 py-2 border text-center bg-gray-100 text-gray-400 text-xs">N/A</td>'; }
@@ -2227,7 +2657,7 @@ function renderMarkEntryGrid(container, cls, sub, term, editable) {
             });
             cells += '<td class="px-2 py-2 border text-center font-bold text-blue-700 bg-blue-50/40" id="me-total-' + st.id + '">' + (rowTotal || 0) + '</td>';
         }
-        tbody += '<tr class="text-sm bg-white hover:bg-gray-50"><td class="px-3 py-2 border text-center text-gray-500">' + (i + 1) + '</td><td class="px-3 py-2 border text-center font-medium">' + (st.symbolNo || '-') + '</td><td class="px-4 py-2 border font-semibold">' + st.name + '</td>' + cells + '</tr>';
+        tbody += '<tr class="text-sm bg-white hover:bg-gray-50"><td class="px-3 py-2 border text-center text-gray-500">' + (i + 1) + '</td><td class="px-3 py-2 border text-center font-medium">' + (symForTerm || '-') + '</td><td class="px-4 py-2 border font-semibold">' + st.name + '</td>' + cells + '</tr>';
     });
     container.innerHTML = '<div class="bg-white rounded shadow-sm border overflow-hidden flex flex-col flex-1 min-h-0"><div class="px-4 py-3 border-b bg-gray-50 flex flex-col sm:flex-row sm:items-center justify-between gap-2 shrink-0"><div class="text-sm"><b>' + cls + '</b> · <b>' + sub + '</b> · <span class="text-gray-500">' + (term || 'No Term') + '</span><span class="ml-2 text-xs text-gray-400">(FM: ' + totalFm + ')</span>' + (lockInfo && lockInfo.locked ? ' <span class="ml-2 text-xs text-amber-600 font-bold"><i class="fas fa-lock mr-1"></i>LOCKED</span>' : '') + '</div>' + (editable ? '<button onclick="saveMarkEntryGrid()" class="bg-green-600 text-white px-4 py-2 rounded text-sm font-bold"><i class="fas fa-save mr-1"></i>Save All</button>' : '') + '</div><div class="overflow-auto custom-scrollbar flex-1"><table class="w-full text-left border-collapse">' + thead + '<tbody>' + tbody + '</tbody></table></div></div>';
 }
@@ -2265,7 +2695,7 @@ function onMarkInputBlur(inp) { var sid = inp.getAttribute('data-student'); if (
 async function saveMarkEntryGrid() {
     if (!markEntryCtx) return;
     var lockInfo = findTerm(markEntryCtx.term);
-    if (lockInfo && lockInfo.locked && state.currentUser.role !== 'admin') { showToast('🔒 Term locked', 'error'); return; }
+    if (lockInfo && lockInfo.locked && !isAdmin() && !hasProPermission('manageExamProcess')) { showToast('🔒 Term locked', 'error'); return; }
     var inv = 0;
     document.querySelectorAll('.mark-input').forEach(function(inp) { var fm = Number(inp.getAttribute('data-fm')); if (inp.value !== '' && (Number(inp.value) > fm || Number(inp.value) < 0)) inv++; });
     if (inv > 0) { showToast(inv + ' invalid', 'error'); return; }
@@ -2407,7 +2837,6 @@ function generateLedger(type) {
     var getFm = function(sub) { return getDivs(sub).reduce((a, d) => a + d.fm, 0); };
     var getVal = function(mObj, d) { if (!mObj) return undefined; if (ledgerTheorySource === 'original' && d.category === 'Theory' && mObj.originalComponents && mObj.originalComponents[d.originalIndex] !== undefined) return mObj.originalComponents[d.originalIndex]; return mObj.components ? mObj.components[d.originalIndex] : undefined; };
     var getCons = function(sub) { var divs = getDivs(sub); var th = { category: 'Theory', name: 'TH', fm: 0, pm: 0, refs: [] }; var int = { category: 'Internal', name: 'IN', fm: 0, pm: 0, refs: [] }; divs.forEach(function(d) { if (d.category === 'Theory') { th.fm += d.fm; th.pm += d.pm; th.refs.push(d); } else { int.fm += d.fm; int.pm += d.pm; int.refs.push(d); } }); var r = []; if (th.fm > 0) r.push(th); if (int.fm > 0) r.push(int); return r; };
-
     if (type === 'grade-sheet') {
         var sName = state.examSettings.schoolName || 'Shree Rasuwa Secondary School';
         var sAddr = state.examSettings.schoolAddress || 'Gosaikunda RM-6, Dhunche, Rasuwa';
@@ -2436,7 +2865,8 @@ function generateLedger(type) {
             });
             var fGPA = (hasNG || vc === 0) ? '0.00' : (tGPA / vc).toFixed(2);
             var fStatus = (hasNG || vc === 0) ? 'NG' : 'PASS';
-            return '<div class="page-break gradesheet-a4 bg-white" style="width:21cm;min-height:29.7cm;padding:1.5cm;margin:0 auto 20px;box-shadow:0 2px 10px rgba(0,0,0,0.1);font-family:\'Times New Roman\',serif;color:#000;"><div style="display:flex;align-items:center;justify-content:space-between;border-bottom:3px double #1e3a8a;padding-bottom:12px;margin-bottom:16px;"><div style="width:90px;">' + logo + '</div><div style="text-align:center;flex:1;"><h1 style="font-size:24px;font-weight:bold;margin:0;color:#1e3a8a;text-transform:uppercase;">' + sName + '</h1><p style="font-size:13px;margin:4px 0;">' + sAddr + '</p><h2 style="font-size:15px;font-weight:bold;margin:6px 0 0 0;color:#1e3a8a;">' + term + ' - ' + yr + '</h2><h3 style="font-size:16px;font-weight:bold;margin:8px 0 0 0;text-decoration:underline;">GRADE SHEET</h3></div><div style="width:90px;"></div></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;font-size:13px;padding:10px 0;border-bottom:1px solid #e5e7eb;"><div><strong>Name:</strong> ' + st.name + '</div><div style="text-align:right;"><strong>Symbol:</strong> ' + (st.symbolNo || '-') + '</div><div><strong>Class:</strong> ' + st.className + '</div><div style="text-align:right;"><strong>DOB:</strong> ' + (st.dob || '-') + '</div><div><strong>ID:</strong> ' + st.id + '</div><div style="text-align:right;"><strong>Gender:</strong> ' + (st.gender || '-') + '</div></div><table class="gradesheet-table"><thead><tr><th rowspan="2">S.N</th><th rowspan="2">Code</th><th rowspan="2" style="text-align:left;">Subject</th><th rowspan="2">Cr.Hr</th><th colspan="2">Grade</th><th rowspan="2">Final</th><th rowspan="2">GP</th><th rowspan="2">Remark</th></tr><tr><th>Theory</th><th>Internal</th></tr></thead><tbody>' + rows + '</tbody><tfoot><tr style="background:#f0f4ff;"><td colspan="7" style="text-align:right;">GPA:</td><td colspan="2" style="text-align:center;color:#1e3a8a;">' + fGPA + '</td></tr><tr style="background:#f0f4ff;"><td colspan="7" style="text-align:right;">Final:</td><td colspan="2" style="text-align:center;color:' + (fStatus === 'NG' ? '#dc2626' : '#16a34a') + ';">' + fStatus + '</td></tr></tfoot></table><div style="font-size:10px;border:1px solid #1e3a8a;padding:8px;background:#f8faff;margin-bottom:24px;"><strong>Scale:</strong> A+ (90-100) | A (80-89) | B+ (70-79) | B (60-69) | C+ (50-59) | C (40-49) | D (35-39) | NG</div>' + sig + '</div>';
+            var displaySymbol = (st.symbolNos && st.symbolNos[term]) || st.symbolNo || '-';
+            return '<div class="page-break gradesheet-a4 bg-white" style="width:21cm;min-height:29.7cm;padding:1.5cm;margin:0 auto 20px;box-shadow:0 2px 10px rgba(0,0,0,0.1);font-family:\'Times New Roman\',serif;color:#000;"><div style="display:flex;align-items:center;justify-content:space-between;border-bottom:3px double #1e3a8a;padding-bottom:12px;margin-bottom:16px;"><div style="width:90px;">' + logo + '</div><div style="text-align:center;flex:1;"><h1 style="font-size:24px;font-weight:bold;margin:0;color:#1e3a8a;text-transform:uppercase;">' + sName + '</h1><p style="font-size:13px;margin:4px 0;">' + sAddr + '</p><h2 style="font-size:15px;font-weight:bold;margin:6px 0 0 0;color:#1e3a8a;">' + term + ' - ' + yr + '</h2><h3 style="font-size:16px;font-weight:bold;margin:8px 0 0 0;text-decoration:underline;">GRADE SHEET</h3></div><div style="width:90px;"></div></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;font-size:13px;padding:10px 0;border-bottom:1px solid #e5e7eb;"><div><strong>Name:</strong> ' + st.name + '</div><div style="text-align:right;"><strong>Symbol:</strong> ' + displaySymbol + '</div><div><strong>Class:</strong> ' + st.className + '</div><div style="text-align:right;"><strong>DOB:</strong> ' + (st.dob || '-') + '</div><div><strong>ID:</strong> ' + st.id + '</div><div style="text-align:right;"><strong>Gender:</strong> ' + (st.gender || '-') + '</div></div><table class="gradesheet-table"><thead><tr><th rowspan="2">S.N</th><th rowspan="2">Code</th><th rowspan="2" style="text-align:left;">Subject</th><th rowspan="2">Cr.Hr</th><th colspan="2">Grade</th><th rowspan="2">Final</th><th rowspan="2">GP</th><th rowspan="2">Remark</th></tr><tr><th>Theory</th><th>Internal</th></tr></thead><tbody>' + rows + '</tbody><tfoot><tr style="background:#f0f4ff;"><td colspan="7" style="text-align:right;">GPA:</td><td colspan="2" style="text-align:center;color:#1e3a8a;">' + fGPA + '</td></tr><tr style="background:#f0f4ff;"><td colspan="7" style="text-align:right;">Final:</td><td colspan="2" style="text-align:center;color:' + (fStatus === 'NG' ? '#dc2626' : '#16a34a') + ';">' + fStatus + '</td></tr></tfoot></table><div style="font-size:10px;border:1px solid #1e3a8a;padding:8px;background:#f8faff;margin-bottom:24px;"><strong>Scale:</strong> A+ (90-100) | A (80-89) | B+ (70-79) | B (60-69) | C+ (50-59) | C (40-49) | D (35-39) | NG</div>' + sig + '</div>';
         }).join('');
         c.innerHTML = '<div class="px-4 py-4 text-center print-section"><div class="no-print mb-4 flex justify-end"><button onclick="window.print()" class="bg-gray-800 text-white px-6 py-2 rounded text-sm"><i class="fas fa-print mr-1"></i>Print</button></div><div class="grade-sheet-container text-left" style="background:#f3f4f6;padding:20px 0;">' + sheets + '</div></div>';
         return;
@@ -2498,7 +2928,8 @@ function generateLedger(type) {
         thead += '</tr></thead>';
     }
     var tbody = data.map(function(sd, i) {
-        var r = '<tr class="hover:bg-gray-50 text-xs bg-white"><td class="px-2 py-1.5 border text-center text-gray-500">' + (i + 1) + '</td><td class="px-3 py-1.5 border font-medium text-center">' + (sd.student.symbolNo || '-') + '</td><td class="px-3 py-1.5 border font-semibold truncate max-w-[150px]">' + sd.student.name + '</td>';
+        var symForTerm = (sd.student.symbolNos && sd.student.symbolNos[term]) || sd.student.symbolNo || '-';
+        var r = '<tr class="hover:bg-gray-50 text-xs bg-white"><td class="px-2 py-1.5 border text-center text-gray-500">' + (i + 1) + '</td><td class="px-3 py-1.5 border font-medium text-center">' + symForTerm + '</td><td class="px-3 py-1.5 border font-semibold truncate max-w-[150px]">' + sd.student.name + '</td>';
         subjects.forEach(function(sub) {
             var m = sd.marks[sub];
             if (m === 'N/A') { var divs = (type === 'mark-consolidated' || type === 'grade-consolidated') ? getCons(sub) : getDivs(sub); divs.forEach(function() { r += '<td class="px-1 py-1 border text-center text-gray-300 bg-gray-50">-</td>'; }); }
@@ -2550,8 +2981,9 @@ window.renderResultAnalytics = renderResultAnalytics;
 // ============================================================
 var currentAttendanceContext = null;
 function renderStudentAttendance(container) {
-    var isAdmin = state.currentUser.role === 'admin';
-    var avail = isAdmin ? state.classes : (state.currentUser.classTeacherOf || []);
+    var isAdm = isAdmin();
+    var canSeeAll = isAdm || (isProUser() && hasProPermission('viewAllAttendance'));
+    var avail = canSeeAll ? state.classes : (state.currentUser.classTeacherOf || []);
     var cOpts = avail.map(c => '<option value="' + c + '">' + c + '</option>').join('');
     var mOpts = state.months.map(m => '<option value="' + m + '">' + m + '</option>').join('');
     var yr = state.activeSession || '2083';
@@ -2573,8 +3005,8 @@ function loadAttendanceList() {
     var tb = document.getElementById('att-tbody');
     var th = document.getElementById('att-thead');
     if (!studs.length) { showToast('No students', 'error'); cont.classList.add('hidden'); return; }
-    var isAdmin = state.currentUser.role === 'admin';
-    var canEdit = !isAdmin && !isRange;
+    var canSeeAll = isAdmin() || (isProUser() && hasProPermission('viewAllAttendance'));
+    var canEdit = !canSeeAll && !isRange && isClassTeacher();
     var btns = canEdit ? '<button onclick="exportAttendanceExcel()" class="bg-green-600 text-white px-3 py-1.5 rounded text-sm font-bold"><i class="fas fa-file-excel mr-1"></i>Export</button><button onclick="saveAttendance()" class="bg-blue-600 text-white px-3 py-1.5 rounded text-sm font-bold"><i class="fas fa-save mr-1"></i>Save</button>' : '<button onclick="exportAttendanceExcel()" class="bg-green-600 text-white px-4 py-2 rounded text-sm font-bold"><i class="fas fa-file-excel mr-1"></i>Export Report</button>';
     document.getElementById('att-action-container').innerHTML = btns;
     currentAttendanceContext = { year: year, monthFrom: mFrom, monthTo: mTo, cls: cls, students: studs, selectedMonths: mons, canEdit: canEdit };
@@ -2657,46 +3089,13 @@ window.exportAttendanceExcel = exportAttendanceExcel;
     if (loadSession() && state.currentUser) {
         if (state.currentUser.role === 'teacher') {
             var ft = state.teachers.find(t => t.id === state.currentUser.id);
-            if (ft) state.currentUser = Object.assign({}, ft, { role: 'teacher', impersonating: state.currentUser.impersonating, studentPermissions: ft.studentPermissions || { add: true, edit: true, delete: true } });
+            if (ft) state.currentUser = Object.assign({}, ft, { role: 'teacher', impersonating: state.currentUser.impersonating, studentPermissions: ft.studentPermissions || { add: true, edit: true, delete: true }, isPro: !!ft.isPro, proPermissions: ft.proPermissions || {} });
         }
         if (state.currentUser && state.currentUser.role) {
             setTimeout(function() { loadApp(); }, 400);
         }
     }
 })();
-</script>
-
-<script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
-    import { getFirestore, doc, getDoc, setDoc, onSnapshot, getDocFromServer } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-    import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
-
-    const firebaseConfig = {
-        apiKey: "AIzaSyD_jCowXKj1oJRDFM9_8jKzVZvxJwPrlwM",
-        authDomain: "gen-lang-client-0670539434.firebaseapp.com",
-        databaseURL: "https://gen-lang-client-0670539434-default-rtdb.firebaseio.com",
-        projectId: "gen-lang-client-0670539434",
-        firestoreDatabaseId: "ai-studio-rasuwasecondarys-2d8e3c7b-eda7-4ff4-bed6-7ff7d809f459",
-        storageBucket: "gen-lang-client-0670539434.firebasestorage.app",
-        messagingSenderId: "700954170907",
-        appId: "1:700954170907:web:b6c649c9ad139fef5e8abe",
-        oAuthClientId: "700954170907-unj4holkbi2cn8hro2nl2maj3uvgdfa2.apps.googleusercontent.com"
-    };
-
-    const app = initializeApp(firebaseConfig);
-    const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
-    const auth = getAuth(app);
-    const OperationType = { CREATE: 'create', UPDATE: 'update', DELETE: 'delete', LIST: 'list', GET: 'get', WRITE: 'write' };
-    function handleFirestoreError(error, operationType, path) {
-        const errInfo = { error: error instanceof Error ? error.message : String(error), authInfo: { userId: auth?.currentUser?.uid || null, email: auth?.currentUser?.email || null }, operationType, path };
-        console.error('Firestore Error: ', JSON.stringify(errInfo));
-        throw new Error(JSON.stringify(errInfo));
-    }
-    async function testConnection() { console.log("Firebase Firestore connected."); return true; }
-    window.portalFirebase = { app, db, auth, doc, getDoc, getDocFromServer, setDoc, onSnapshot, handleFirestoreError, OperationType, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged, testConnection };
-    window.portalFirebaseReadyDispatched = true;
-    window.dispatchEvent(new CustomEvent('portalFirebaseReady'));
-    if (typeof window.initPortalCloudSync === 'function') window.initPortalCloudSync();
 </script>
 
 </body>
