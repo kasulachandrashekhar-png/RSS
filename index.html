@@ -235,7 +235,6 @@
     if (typeof window.initPortalCloudSync === 'function') window.initPortalCloudSync();
 </script>
 
-
 <script>
 // ============================================================
 // GLOBAL HELPERS
@@ -268,44 +267,85 @@ window.switchLoginTab = function(role) {
 
 // ============================================================
 // ✅ DOB NORMALIZE HELPER
-// Converts any format like "2065-1-1", "2065-01-1", "2065-1-01", "2065/1/1", "2065.1.1"
-// to standard "2065-01-01" format
 // ============================================================
 window.normalizeDOB = function(dob) {
     if (!dob && dob !== 0) return '';
     var str = String(dob).trim();
     if (!str) return '';
-    // Match patterns like 2065-1-1, 2065/01/1, 2065.1.01, 2065_1_1
     var match = str.match(/^(\d{1,4})[\-\/\.\s\_]+(\d{1,2})[\-\/\.\s\_]+(\d{1,2})$/);
     if (match) {
         var y = String(match[1]).padStart(4, '0');
         var m = String(match[2]).padStart(2, '0');
         var d = String(match[3]).padStart(2, '0');
-        // Validate ranges (BS month 1-12, day 1-32)
         var mi = parseInt(m, 10), di = parseInt(d, 10);
         if (mi >= 1 && mi <= 12 && di >= 1 && di <= 32) {
             return y + '-' + m + '-' + d;
         }
     }
-    // If input has no separators but is 8-digit e.g. "20650101"
     var digits = str.replace(/[^0-9]/g, '');
-    if (digits.length === 8) {
-        return digits.substr(0, 4) + '-' + digits.substr(4, 2) + '-' + digits.substr(6, 2);
-    }
-    // If 7-digit like "2065101" → assume YYYY-M-DD (e.g. 2065-1-01) → wait, ambiguous. Try YYYYMMDD best-effort.
-    if (digits.length === 7) {
-        // Assume format YYYYMDD or YYYYMMD — try YYYYMMDD first with leading zero on M
-        var y7 = digits.substr(0, 4);
-        var m7 = digits.substr(4, 1);
-        var d7 = digits.substr(5, 2);
-        return y7 + '-' + m7.padStart(2, '0') + '-' + d7;
-    }
-    if (digits.length === 6) {
-        // YYMMDD — rare in BS, but pad
-        return '20' + digits.substr(0, 2) + '-' + digits.substr(2, 2) + '-' + digits.substr(4, 2);
-    }
-    // Return as-is if no match
+    if (digits.length === 8) return digits.substr(0, 4) + '-' + digits.substr(4, 2) + '-' + digits.substr(6, 2);
+    if (digits.length === 7) return digits.substr(0, 4) + '-' + digits.substr(4, 1).padStart(2, '0') + '-' + digits.substr(5, 2);
+    if (digits.length === 6) return '20' + digits.substr(0, 2) + '-' + digits.substr(2, 2) + '-' + digits.substr(4, 2);
     return str;
+};
+
+// ============================================================
+// ✅ UNIQUE TEACHER ID GENERATOR (Bug Fix)
+// ============================================================
+window.generateUniqueTeacherId = function() {
+    var existingIds = new Set(state.teachers.map(function(t) { return t.id; }));
+    var counter = 1;
+    var newId;
+    do {
+        newId = 'T-' + Date.now() + '-' + Math.floor(Math.random() * 10000).toString().padStart(4, '0') + '-' + counter;
+        counter++;
+        if (counter > 10000) {
+            newId = 'T-UUID-' + 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+                var r = Math.random() * 16 | 0;
+                var v = c === 'x' ? r : (r & 0x3 | 0x8);
+                return v.toString(16);
+            });
+            break;
+        }
+    } while (existingIds.has(newId));
+    return newId;
+};
+
+// ============================================================
+// ✅ AUTO-FIX DUPLICATE TEACHER IDs
+// ============================================================
+window.fixExistingDuplicateTeacherIds = function() {
+    if (!state.teachers || !state.teachers.length) return 0;
+    var idGroups = {};
+    state.teachers.forEach(function(t) {
+        if (!idGroups[t.id]) idGroups[t.id] = [];
+        idGroups[t.id].push(t);
+    });
+    var duplicates = Object.keys(idGroups).filter(function(k) { return idGroups[k].length > 1; });
+    if (duplicates.length === 0) return 0;
+    console.warn('⚠️ Duplicate teacher IDs detected:', duplicates.length);
+    var fixedCount = 0;
+    duplicates.forEach(function(dupId) {
+        var group = idGroups[dupId];
+        for (var i = 1; i < group.length; i++) {
+            var t = group[i];
+            var oldId = t.id;
+            var newId;
+            var counter = 1;
+            do {
+                newId = 'T-FIX-' + Date.now() + '-' + Math.floor(Math.random() * 10000).toString().padStart(4, '0') + '-' + counter;
+                counter++;
+            } while (state.teachers.find(function(x) { return x.id === newId; }));
+            t.id = newId;
+            fixedCount++;
+            console.log('🔧 Fixed: ' + (t.fullName || t.username) + ': ' + oldId + ' → ' + newId);
+        }
+    });
+    if (fixedCount > 0) {
+        saveState(true, 'teachers');
+        console.log('✅ Auto-fixed ' + fixedCount + ' duplicate teacher ID(s)');
+    }
+    return fixedCount;
 };
 
 // ============================================================
@@ -419,22 +459,18 @@ function switchSession(year) {
 }
 
 // ============================================================
-// ✅ PERMISSION CHECKS (Admin / Pro / Class Teacher / Teacher)
+// PERMISSION CHECKS
 // ============================================================
 function isAdmin() { return state.currentUser && state.currentUser.role === 'admin'; }
 function isProUser() { return state.currentUser && state.currentUser.role === 'teacher' && state.currentUser.isPro === true; }
 function isClassTeacher() { return state.currentUser && state.currentUser.role === 'teacher' && (state.currentUser.classTeacherOf || []).length > 0; }
 function isNormalTeacher() { return state.currentUser && state.currentUser.role === 'teacher' && !state.currentUser.isPro && (state.currentUser.classTeacherOf || []).length === 0; }
-
-// Check a Pro permission — Admin always true
 function hasProPermission(permKey) {
     if (isAdmin()) return true;
     if (!isProUser()) return false;
     var proPerms = state.currentUser.proPermissions || {};
     return proPerms[permKey] === true;
 }
-
-// Legacy: CT permissions for student management in own class
 function getCtPermissions() {
     if (!state.currentUser) return { add: false, edit: false, delete: false };
     if (isAdmin()) return { add: true, edit: true, delete: true };
@@ -448,23 +484,18 @@ function getCtPermissions() {
     var p = state.currentUser.studentPermissions || { add: true, edit: true, delete: true };
     return p;
 }
-
-// Which classes can this user edit students in
 function getEditableClasses() {
     if (!state.currentUser) return [];
     if (isAdmin()) return state.classes;
     if (isProUser() && hasProPermission('viewAllStudents')) return state.classes;
     return state.currentUser.classTeacherOf || [];
 }
-
 function canEditStudentInClass(className) {
     if (!state.currentUser) return false;
     if (isAdmin()) return true;
     if (isProUser() && hasProPermission('viewAllStudents')) return true;
     return (state.currentUser.classTeacherOf || []).includes(className);
 }
-
-// Generic access to a full module
 function canAccessModule(moduleKey) {
     if (isAdmin()) return true;
     if (!isProUser()) return false;
@@ -526,7 +557,6 @@ function updateSaveIndicator(failed, overrideStatus) {
 // ============================================================
 function migrateOldDataToSessions(saved) {
     if (saved.sessions && Object.keys(saved.sessions).length > 0) {
-        // Normalize DOBs in already-migrated sessions
         Object.keys(saved.sessions).forEach(function(y) {
             var sess = saved.sessions[y];
             if (sess && Array.isArray(sess.students)) {
@@ -665,11 +695,12 @@ async function pullLatestFromCloud(silent) {
         if (teachersSnap && teachersSnap.exists()) { const d = teachersSnap.data(); if (d.list && d.list.length) state.teachers = d.list; }
         if (!state.activeSession && Object.keys(state.sessions).length) state.activeSession = Object.keys(state.sessions)[0];
         ensureSessionExists(state.activeSession || '2083');
-        // Normalize all student DOBs after cloud pull
         Object.keys(state.sessions).forEach(function(y) {
             var sess = state.sessions[y];
             if (sess && Array.isArray(sess.students)) sess.students.forEach(function(st) { if (st.dob) st.dob = window.normalizeDOB(st.dob); if (!st.symbolNos) st.symbolNos = {}; });
         });
+        // ✅ Auto-fix duplicate teacher IDs after cloud pull
+        try { window.fixExistingDuplicateTeacherIds(); } catch (e) { console.warn('Auto-fix after pull failed:', e); }
         try { localStorage.setItem(STORAGE_KEY, JSON.stringify(persistableState())); } catch (e) {}
         dirtySections.clear(); lastCloudSyncTime = new Date(); cloudSyncStatus = 'synced'; updateSaveIndicator();
         if (typeof smartRefreshActivePage === 'function') smartRefreshActivePage();
@@ -717,7 +748,13 @@ async function initPortalCloudSync() {
                 Object.keys(state.sessions).forEach(function(y) { var sess = state.sessions[y]; if (sess && Array.isArray(sess.students)) sess.students.forEach(function(st) { if (st.dob) st.dob = window.normalizeDOB(st.dob); if (!st.symbolNos) st.symbolNos = {}; }); });
             }
         });
-        attach(fb.doc(fb.db, 'school_portal', 'teachers'), 'teachers', function(d) { if (d.list && d.list.length) state.teachers = d.list; });
+        attach(fb.doc(fb.db, 'school_portal', 'teachers'), 'teachers', function(d) {
+            if (d.list && d.list.length) {
+                state.teachers = d.list;
+                // ✅ Auto-fix duplicate teacher IDs after teacher sync
+                try { window.fixExistingDuplicateTeacherIds(); } catch (e) { console.warn('Auto-fix teachers failed:', e); }
+            }
+        });
     } catch (e) { console.error('Cloud init error:', e); cloudSyncStatus = 'error'; updateSaveIndicator(true); }
     finally { isCloudSyncInitializing = false; }
 }
@@ -832,7 +869,8 @@ window.logout = function() {
 window.loadApp = function() {
     if (!state.activeSession) state.activeSession = state.examSettings.academicYear || '2083';
     ensureSessionExists(state.activeSession);
-    // Load fresh teacher data (permissions may have changed)
+    // ✅ Auto-fix duplicate teacher IDs on app load
+    try { window.fixExistingDuplicateTeacherIds(); } catch (e) { console.warn('Auto-fix on loadApp failed:', e); }
     if (state.currentUser.role === 'teacher' && state.currentUser.id) {
         var freshT = state.teachers.find(t => t.id === state.currentUser.id);
         if (freshT) {
@@ -867,7 +905,6 @@ window.loadApp = function() {
     navigate(targetPage);
 };
 
-// Determine default page based on role
 function getDefaultPage() {
     if (isAdmin()) return 'manage-students';
     if (isProUser()) {
@@ -882,7 +919,6 @@ function getDefaultPage() {
     return 'mark-entry';
 }
 
-// Check if current user can access a given page
 function canAccessPage(pageId) {
     if (isAdmin()) return true;
     if (isProUser()) {
@@ -896,16 +932,13 @@ function canAccessPage(pageId) {
         if (pageId === 'grade-rules') return hasProPermission('manageGradeRules');
         if (pageId === 'student-attendance') return hasProPermission('viewAllAttendance');
         if (pageId === 'upload-settings') return hasProPermission('manageSettings');
-        if (pageId === 'result-analytics') return hasProPermission('viewAnalytics') || true; // Pro can always see analytics
+        if (pageId === 'result-analytics') return true;
         if (pageId === 'view-results') return hasProPermission('viewAnalytics') || hasProPermission('manageResultMgmt');
         if (pageId === 'admin-teacher-view') return false;
     }
-    // Teacher / Class Teacher — limited pages
     var teacherPages = ['mark-entry', 'my-classes', 'profile-settings', 'result-analytics', 'student-attendance', 'manage-students', 'view-results'];
     if (teacherPages.indexOf(pageId) === -1) return false;
-    if (pageId === 'student-attendance') {
-        return isClassTeacher();
-    }
+    if (pageId === 'student-attendance') return isClassTeacher();
     if (pageId === 'manage-students') return isClassTeacher();
     return true;
 }
@@ -938,7 +971,6 @@ function buildSidebar() {
             { id: 'upload-settings', icon: 'fa-upload', text: 'Settings' }
         ];
     } else if (isProUser()) {
-        // Pro User — build sidebar based on granted permissions
         if (hasProPermission('viewAllStudents')) links.push({ id: 'manage-students', icon: 'fa-users', text: 'Manage Students' });
         if (hasProPermission('manageTeachers')) links.push({ id: 'manage-teachers', icon: 'fa-chalkboard-teacher', text: 'Manage Teachers' });
         if (hasProPermission('manageAcademic')) links.push({ id: 'manage-academic', icon: 'fa-book', text: 'Classes & Subjects' });
@@ -953,7 +985,6 @@ function buildSidebar() {
         if (hasProPermission('viewAnalytics')) links.push({ id: 'result-analytics', icon: 'fa-chart-line', text: 'Analytics' });
         if (hasProPermission('viewAllAttendance')) links.push({ id: 'student-attendance', icon: 'fa-calendar-check', text: 'Attendance' });
         if (hasProPermission('manageSettings')) links.push({ id: 'upload-settings', icon: 'fa-upload', text: 'Settings' });
-        // Always available for Pro
         links.push({ id: 'mark-entry', icon: 'fa-edit', text: 'Enter Marks' });
         links.push({ id: 'profile-settings', icon: 'fa-user-cog', text: 'Profile Settings' });
     } else {
@@ -1056,7 +1087,7 @@ function navigate(pageId) {
         const map = { 'manage-students': 'renderManageStudents', 'manage-teachers': 'renderManageTeachers', 'admin-teacher-view': 'renderAdminTeacherView', 'manage-academic': 'renderManageAcademic', 'term-management': 'renderTermManagement', 'subject-management': 'renderSubjectManagement', 'exam-process': 'renderExamProcess', 'result-mgmt': 'renderResultMgmt', 'grade-rules': 'renderGradeRules', 'view-results': 'renderViewResults', 'result-analytics': 'renderResultAnalytics', 'student-attendance': 'renderStudentAttendance', 'upload-settings': 'renderUploadSettings', 'mark-entry': 'renderMarkEntry', 'my-classes': 'renderMyClasses', 'profile-settings': 'renderProfileSettings' };
         const fn = map[pageId];
         if (fn && typeof window[fn] === 'function') window[fn](content);
-    }, 80);
+    }, 30);
 }
 function toggleSidebar() {
     const s = document.getElementById('sidebar');
@@ -1300,7 +1331,6 @@ window.hidePublicResultPortal = hidePublicResultPortal;
 window.loadPublicSymbols = loadPublicSymbols;
 window.searchPublicResult = searchPublicResult;
 </script>
-
 
 <script>
 // ============================================================
@@ -1821,7 +1851,7 @@ window.toggleTermLock = toggleTermLock;
 window.toggleTermPublish = toggleTermPublish;
 
 // ============================================================
-// TEACHERS (with Pro Grant UI)
+// TEACHERS (with FIXED unique ID + Pro Grant UI)
 // ============================================================
 var editingTeacherId = null, confirmDeleteTeacherId = null;
 var grantingProTeacherId = null;
@@ -1864,7 +1894,8 @@ function handleTeacherExcelUpload(event) {
                 var cr = generateTeacherCredentials(name, contact);
                 var u = cr.username, p = cr.password, i = 1;
                 while (state.teachers.find(t => t.username === u)) { u = cr.username + i; i++; }
-                state.teachers.push({ id: 'T' + Date.now() + Math.floor(Math.random() * 1000), username: u, password: p, fullName: name, email: email, contact: contact || '-', assignments: [], classTeacherOf: [], studentPermissions: { add: true, edit: true, delete: true }, isPro: false, proPermissions: {} });
+                // ✅ FIXED: Using generateUniqueTeacherId()
+                state.teachers.push({ id: generateUniqueTeacherId(), username: u, password: p, fullName: name, email: email, contact: contact || '-', assignments: [], classTeacherOf: [], studentPermissions: { add: true, edit: true, delete: true }, isPro: false, proPermissions: {} });
                 added++;
             });
             if (added) saveState(true, 'teachers');
@@ -1883,6 +1914,23 @@ function toggleNewTeacherFields() {
 }
 function handleCreateTeacher(e) {
     e.preventDefault();
+    
+    // ✅ Safety pre-check: Duplicate IDs हुन् कि भनेर जाँच्ने
+    (function preCheckIds() {
+        var seen = new Set();
+        var hasDup = false;
+        state.teachers.forEach(function(t) {
+            if (seen.has(t.id)) hasDup = true;
+            seen.add(t.id);
+        });
+        if (hasDup) {
+            showToast('⚠️ Purano data ma duplicate ID cha — auto-fixing...', 'warning');
+            window.fixExistingDuplicateTeacherIds();
+            setTimeout(function() { renderManageTeachers(document.getElementById('content-area')); }, 500);
+            return;
+        }
+    })();
+    
     var sel = document.getElementById('t-select').value;
     var cls = document.getElementById('t-class').value;
     var sub = document.getElementById('t-subject').value;
@@ -1904,7 +1952,8 @@ function handleCreateTeacher(e) {
         var cr = generateTeacherCredentials(name, contact);
         var u = cr.username, p = cr.password;
         if (state.teachers.find(t => t.username === u)) u += Math.floor(Math.random() * 10);
-        state.teachers.push({ id: 'T' + Date.now(), username: u, password: p, fullName: name, email: email, contact: contact || '-', assignments: sub ? [{ className: cls, subject: sub }] : [], classTeacherOf: isCT ? [cls] : [], studentPermissions: permissions, isPro: false, proPermissions: {} });
+        // ✅ FIXED: Using generateUniqueTeacherId()
+        state.teachers.push({ id: generateUniqueTeacherId(), username: u, password: p, fullName: name, email: email, contact: contact || '-', assignments: sub ? [{ className: cls, subject: sub }] : [], classTeacherOf: isCT ? [cls] : [], studentPermissions: permissions, isPro: false, proPermissions: {} });
         saveState(true, 'teachers'); showToast('Created ' + name, 'success');
         renderManageTeachers(document.getElementById('content-area'));
     } else {
@@ -2033,7 +2082,21 @@ function saveEditTeacher(id) {
     if (!u || !p || !n) { showToast("Required fields", "error"); return; }
     if (!e || e.indexOf('@') === -1) { showToast("Valid Gmail required", "error"); return; }
     if (state.teachers.some(t => t.id !== id && (t.email || '').toLowerCase() === e)) { showToast("Gmail exists!", "error"); return; }
-    var t = state.teachers.find(x => x.id === id);
+    
+    // ✅ FIXED: Strict matching with duplicate detection
+    var matches = state.teachers.filter(function(x) { return x.id === id; });
+    if (matches.length > 1) {
+        console.warn('⚠️ DUPLICATE TEACHER ID detected in saveEditTeacher:', id);
+        console.warn('Matches:', matches.map(function(m) { return m.fullName; }));
+        showToast('⚠️ Duplicate ID भेटियो — Auto-fix गर्दै...', 'warning');
+        window.fixExistingDuplicateTeacherIds();
+        setTimeout(function() {
+            editingTeacherId = null;
+            updateTeacherList();
+        }, 500);
+        return;
+    }
+    var t = matches[0];
     if (t) {
         t.username = u; t.password = p; t.fullName = n; t.email = e;
         if (ct) t.contact = ct;
@@ -2269,9 +2332,10 @@ window.loadCreditHours = loadCreditHours;
 window.saveCreditHours = saveCreditHours;
 </script>
 
+
 <script>
 // ============================================================
-// EXAM PROCESS (with Term-wise Symbol Number)
+// EXAM PROCESS (Term-wise Symbol No)
 // ============================================================
 function renderExamProcess(container) {
     container.innerHTML = '<div class="fade-in flex flex-col h-full gap-4"><div class="flex overflow-x-auto border-b bg-gray-50 hide-scrollbar rounded-t-xl"><button onclick="switchExamProcessTab(\'routine\')" id="sub-tab-routine" class="exam-process-tab px-6 py-3 text-sm font-semibold text-blue-600 border-b-2 border-blue-600 whitespace-nowrap">Routine</button><button onclick="switchExamProcessTab(\'term-mark-mgmt\')" id="sub-tab-term-mark-mgmt" class="exam-process-tab px-6 py-3 text-sm font-medium text-gray-500 border-b-2 border-transparent whitespace-nowrap">Mark Mgmt</button><button onclick="switchExamProcessTab(\'symbol-no\')" id="sub-tab-symbol-no" class="exam-process-tab px-6 py-3 text-sm font-medium text-gray-500 border-b-2 border-transparent whitespace-nowrap">Symbol No</button><button onclick="switchExamProcessTab(\'admit-card\')" id="sub-tab-admit-card" class="exam-process-tab px-6 py-3 text-sm font-medium text-gray-500 border-b-2 border-transparent whitespace-nowrap">Admit Card</button><button onclick="switchExamProcessTab(\'mark-slip\')" id="sub-tab-mark-slip" class="exam-process-tab px-6 py-3 text-sm font-medium text-gray-500 border-b-2 border-transparent whitespace-nowrap">Mark Slip</button></div><div id="exam-process-content" class="flex-1 min-w-0 bg-white border rounded-b-xl p-4 shadow-sm overflow-y-auto"></div></div>';
@@ -2289,7 +2353,7 @@ function switchExamProcessTab(tabId) {
         else if (tabId === 'symbol-no') renderSymbolNo(c);
         else if (tabId === 'admit-card') renderAdmitCard(c);
         else if (tabId === 'mark-slip') renderMarkSlip(c);
-    }, 50);
+    }, 30);
 }
 function renderExamRoutine(container) {
     if (!state.examSettings.routines) state.examSettings.routines = {};
@@ -2347,7 +2411,7 @@ function saveExamRoutineMatrix() {
     saveState(true); showToast('Routine saved!', 'success'); renderExamRoutine(document.getElementById('exam-process-content'));
 }
 
-// ---- TERM-WISE SYMBOL NO ----
+// ---- SYMBOL NO (Term-wise) ----
 function renderSymbolNo(container) {
     var opts = state.classes.map(c => '<option value="' + c + '">' + c + '</option>').join('');
     var termOpts = getTerms().map(t => '<option value="' + t.name + '">' + t.name + (t.locked ? ' 🔒' : '') + '</option>').join('');
@@ -2398,7 +2462,7 @@ function generateSymbolNos() {
 function saveSymbolNos(cls) {
     var term = document.getElementById('sym-term-select').value;
     if (!term) { showToast('Please select Term first', 'error'); return; }
-    if (isTermLocked(term) && !isAdmin() && !hasProPermission('manageExamProcess')) { showToast('🔒 Term locked', 'error'); return; }
+    if (isTermLocked(term) && !isAdmin()) { showToast('🔒 Term locked', 'error'); return; }
     var session = getActiveSessionData();
     var studs = session.students.filter(s => s.className === cls);
     var n = 0;
@@ -2625,7 +2689,7 @@ function getMarkEntryDivisions(cls, sub) {
 }
 function renderMarkEntryGrid(container, cls, sub, term, editable) {
     var lockInfo = findTerm(term);
-    if (lockInfo && lockInfo.locked && !isAdmin() && !hasProPermission('manageExamProcess')) {
+    if (lockInfo && lockInfo.locked && !isAdmin()) {
         container.innerHTML = '<div class="bg-red-50 border-2 border-red-200 rounded p-8 text-center"><i class="fas fa-lock text-red-500 text-5xl mb-4"></i><h3 class="text-lg font-bold text-red-700 mb-2">Term Locked</h3><p class="text-sm text-red-600 mb-4">🔒 "' + term + '" is locked.</p></div>';
         return;
     }
@@ -2695,7 +2759,7 @@ function onMarkInputBlur(inp) { var sid = inp.getAttribute('data-student'); if (
 async function saveMarkEntryGrid() {
     if (!markEntryCtx) return;
     var lockInfo = findTerm(markEntryCtx.term);
-    if (lockInfo && lockInfo.locked && !isAdmin() && !hasProPermission('manageExamProcess')) { showToast('🔒 Term locked', 'error'); return; }
+    if (lockInfo && lockInfo.locked && !isAdmin()) { showToast('🔒 Term locked', 'error'); return; }
     var inv = 0;
     document.querySelectorAll('.mark-input').forEach(function(inp) { var fm = Number(inp.getAttribute('data-fm')); if (inp.value !== '' && (Number(inp.value) > fm || Number(inp.value) < 0)) inv++; });
     if (inv > 0) { showToast(inv + ' invalid', 'error'); return; }
@@ -2794,7 +2858,7 @@ window.handleRestoreFile = handleRestoreFile;
 window.resetAllData = resetAllData;
 
 // ============================================================
-// RESULT MGMT
+// RESULT MGMT (Term-wise Symbol)
 // ============================================================
 function renderResultMgmt(container) {
     container.innerHTML = '<div class="flex flex-col h-full gap-4"><div class="flex overflow-x-auto border-b bg-gray-50 hide-scrollbar rounded-t-xl"><button onclick="switchResultTab(\'mark\')" id="sub-tab-mark" class="result-tab px-6 py-3 text-sm font-semibold text-blue-600 border-b-2 border-blue-600 whitespace-nowrap">Markwise Ledger</button></div><div id="result-content" class="flex-1 min-w-0 bg-white border rounded-b-xl p-4 shadow-sm overflow-y-auto"></div></div>';
@@ -2837,6 +2901,7 @@ function generateLedger(type) {
     var getFm = function(sub) { return getDivs(sub).reduce((a, d) => a + d.fm, 0); };
     var getVal = function(mObj, d) { if (!mObj) return undefined; if (ledgerTheorySource === 'original' && d.category === 'Theory' && mObj.originalComponents && mObj.originalComponents[d.originalIndex] !== undefined) return mObj.originalComponents[d.originalIndex]; return mObj.components ? mObj.components[d.originalIndex] : undefined; };
     var getCons = function(sub) { var divs = getDivs(sub); var th = { category: 'Theory', name: 'TH', fm: 0, pm: 0, refs: [] }; var int = { category: 'Internal', name: 'IN', fm: 0, pm: 0, refs: [] }; divs.forEach(function(d) { if (d.category === 'Theory') { th.fm += d.fm; th.pm += d.pm; th.refs.push(d); } else { int.fm += d.fm; int.pm += d.pm; int.refs.push(d); } }); var r = []; if (th.fm > 0) r.push(th); if (int.fm > 0) r.push(int); return r; };
+
     if (type === 'grade-sheet') {
         var sName = state.examSettings.schoolName || 'Shree Rasuwa Secondary School';
         var sAddr = state.examSettings.schoolAddress || 'Gosaikunda RM-6, Dhunche, Rasuwa';
@@ -2982,8 +3047,8 @@ window.renderResultAnalytics = renderResultAnalytics;
 var currentAttendanceContext = null;
 function renderStudentAttendance(container) {
     var isAdm = isAdmin();
-    var canSeeAll = isAdm || (isProUser() && hasProPermission('viewAllAttendance'));
-    var avail = canSeeAll ? state.classes : (state.currentUser.classTeacherOf || []);
+    var isPro = isProUser();
+    var avail = isAdm || (isPro && hasProPermission('viewAllAttendance')) ? state.classes : (state.currentUser.classTeacherOf || []);
     var cOpts = avail.map(c => '<option value="' + c + '">' + c + '</option>').join('');
     var mOpts = state.months.map(m => '<option value="' + m + '">' + m + '</option>').join('');
     var yr = state.activeSession || '2083';
@@ -3005,8 +3070,8 @@ function loadAttendanceList() {
     var tb = document.getElementById('att-tbody');
     var th = document.getElementById('att-thead');
     if (!studs.length) { showToast('No students', 'error'); cont.classList.add('hidden'); return; }
-    var canSeeAll = isAdmin() || (isProUser() && hasProPermission('viewAllAttendance'));
-    var canEdit = !canSeeAll && !isRange && isClassTeacher();
+    var isAdm = isAdmin();
+    var canEdit = !isAdm && !isRange;
     var btns = canEdit ? '<button onclick="exportAttendanceExcel()" class="bg-green-600 text-white px-3 py-1.5 rounded text-sm font-bold"><i class="fas fa-file-excel mr-1"></i>Export</button><button onclick="saveAttendance()" class="bg-blue-600 text-white px-3 py-1.5 rounded text-sm font-bold"><i class="fas fa-save mr-1"></i>Save</button>' : '<button onclick="exportAttendanceExcel()" class="bg-green-600 text-white px-4 py-2 rounded text-sm font-bold"><i class="fas fa-file-excel mr-1"></i>Export Report</button>';
     document.getElementById('att-action-container').innerHTML = btns;
     currentAttendanceContext = { year: year, monthFrom: mFrom, monthTo: mTo, cls: cls, students: studs, selectedMonths: mons, canEdit: canEdit };
@@ -3059,7 +3124,7 @@ window.saveAttendance = saveAttendance;
 window.exportAttendanceExcel = exportAttendanceExcel;
 
 // ============================================================
-// INITIALIZATION
+// INITIALIZATION — with AUTO-FIX duplicate teacher IDs
 // ============================================================
 (function() {
     loadState();
@@ -3081,6 +3146,18 @@ window.exportAttendanceExcel = exportAttendanceExcel;
     if (!state.activeSession) state.activeSession = Object.keys(state.sessions)[0];
     ensureSessionExists(state.activeSession);
 
+    // ✅ AUTO-FIX DUPLICATE TEACHER IDs on app load
+    try {
+        var fixedCount = window.fixExistingDuplicateTeacherIds();
+        if (fixedCount > 0) {
+            setTimeout(function() {
+                showToast('⚠️ ' + fixedCount + ' teacher(s) को duplicate ID auto-fix गरियो', 'warning');
+            }, 800);
+        }
+    } catch (e) {
+        console.warn('Auto-fix teacher IDs failed:', e);
+    }
+
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(persistableState())); } catch (e) {}
 
     setInterval(function() { if (dirtySections.size > 0) saveState(false); }, 30000);
@@ -3100,3 +3177,4 @@ window.exportAttendanceExcel = exportAttendanceExcel;
 
 </body>
 </html>
+
